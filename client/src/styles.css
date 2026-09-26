@@ -216,3 +216,23 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .mark { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; font-weight: 900; padding: 1px 6px; border-radius: 6px; background: linear-gradient(135deg, #a98ff3, #66e0ff); color: #08132a; }
 .grade { color: #ffd54a; letter-spacing: -1px; font-weight: 900; text-shadow: 0 1px 0 #000; }
 .foe-list { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 9; }
+
+/* ------------------------------------------------ focus / duel layout */
+.stage.focusing .combatant:not(.focus) .art { filter: brightness(.55) saturate(.6); transition: filter .25s; }
+.stage.focusing .combatant.focus { z-index: 6; }
+.combatant.focus .art { animation: focusin .45s cubic-bezier(.2,.8,.2,1); filter: drop-shadow(0 0 26px rgba(255,255,255,.7)) !important; }
+@keyframes focusin { 0% { transform: scale(.9); } 60% { transform: scale(1.12); } 100% { transform: scale(1.06); } }
+.spot { position: absolute; inset: 0; pointer-events: none; z-index: 5; animation: fade .25s; }
+.callout { position: absolute; left: 50%; top: -34px; transform: translateX(-50%); white-space: nowrap; font-weight: 900; font-size: 18px; color: #fff; -webkit-text-stroke: 1px #111; text-shadow: 0 3px 0 #111, 0 0 16px rgba(255,255,255,.5); animation: callout .5s cubic-bezier(.2,.8,.2,1); z-index: 9; }
+@keyframes callout { 0% { transform: translateX(-50%) translateY(14px) scale(.6); opacity: 0; } 100% { transform: translateX(-50%) translateY(0) scale(1); opacity: 1; } }
+.combatant.stepin .art { animation: stepin .75s cubic-bezier(.2,.8,.2,1); }
+@keyframes stepin { 0% { transform: translateY(40px) scale(.5); opacity: 0; } 55% { transform: translateY(-14px) scale(1.12); opacity: 1; } 75% { transform: translateY(4px) scale(.98); } 100% { transform: translateY(0) scale(1); } }
+.combatant.ally.stepin .art { animation-name: stepinL; } @keyframes stepinL { 0% { transform: translate(-120px, 30px) scale(.5); opacity: 0; } 55% { transform: translate(10px,-14px) scale(1.12); opacity: 1; } 75% { transform: translate(0,4px) scale(.98); } 100% { transform: translate(0,0) scale(1); } }
+.combatant.foe.stepin .art { animation-name: stepinR; } @keyframes stepinR { 0% { transform: translate(120px, -30px) scale(.5); opacity: 0; } 55% { transform: translate(-10px,14px) scale(1.12); opacity: 1; } 75% { transform: translate(0,-4px) scale(.98); } 100% { transform: translate(0,0) scale(1); } }
+.combatant.back { opacity: .75; z-index: 1; transition: left .6s, right .6s, top .6s, bottom .6s, width .6s, opacity .4s; }
+.combatant.back .art { animation: none; filter: brightness(.8); }
+.combatant.front { z-index: 3; }
+.combatant .mini-hp { width: 56px; margin-top: 2px; } .combatant .mini-hp .hpbar { height: 5px; }
+.stage.duel .combatant.front.ally .plate { min-width: 150px; }
+.stage.duel .combatant.front .plate .nm { font-size: 14px; }
+.vs { position: absolute; left: 22%; top: 44%; transform: translate(-50%,-50%); font-size: 44px; font-weight: 900; font-style: italic; color: #fff; -webkit-text-stroke: 2px #111; text-shadow: 0 4px 0 #111, 0 0 30px rgba(255,95,109,.8); animation: bannerin .4s; z-index: 8; pointer-events: none; }

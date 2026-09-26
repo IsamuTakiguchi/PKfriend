@@ -143,16 +143,24 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
   const aliveAllies = () => state.current?.allies.filter(a => !a.fainted) ?? [];
   const aliveFoes = () => state.current?.foes.filter(f => !f.fainted) ?? [];
 
-  function startTurn() {
+  async function startTurn() {
     if (!state.current) return;
     const foes = aliveFoes(); const allies = aliveAllies();
     if (!foes.length || !allies.length) return;
-    const nw = foes[Math.floor(rng.current() * foes.length)]; setNextWild(nw);
-    setTargetUid(t => (t && foes.some(f => f.uid === t) ? t : foes[0].uid));
+    setPhase('resolving');
+    // あいては じどうで 前に出てくる
+    const nw = foes[Math.floor(rng.current() * foes.length)]; setNextWild(nw); setTargetUid(nw.uid);
+    api.setClass(nw.uid, 'stepin', 800); sfx.lunge();
+    await api.focus(nw.uid, `${nw.name}、前へ！`, 1100);
+    api.setLog(`あいての ${nw.name}が 前に出てきた！ こちらは だれを 出す？`);
     const fresh = allies.find(a => a.uid !== tiredUid) ?? allies[0];
-    setAttackerUid(fresh.uid);
-    api.setLog('前に出す ポケモンと あいてを えらんで「こうげき！」');
+    chooseAttacker(fresh.uid, true);
     setPhase('choose'); force(x => x + 1);
+  }
+  function chooseAttacker(uid: string, silent = false) {
+    setAttackerUid(uid);
+    api.setClass(uid, 'stepin', 750);
+    if (!silent) { sfx.select(); void api.focus(uid, '前へ！', 700); }
   }
 
   async function acceptTrainer(yes: boolean) {
@@ -197,7 +205,9 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     const a = state.current.allies.find(x => x.uid === p.attackerUid)!;
     participants.current.add(a.uid);
     const action: BattleAction = { battlerUid: a.uid, moveId: a.moves[0], targetUid: p.targetUid, roulette: p.roulette, initiative: p.initiative, special: p.special, assistUid: p.assistUid, assistRoulette: p.assistRoulette, support: p.support };
-    const foeActs = isTrainerBattle ? trainerActions() : wildActions(state.current, rng.current, nextWild?.uid);
+    const first = !!p.initiative || iAmFaster;
+    await api.banner(first ? `${a.name}の せんこう！` : `${nextWild?.name ?? 'あいて'}の せんこう…！`, first ? 'info' : '', 800);
+    const foeActs = isTrainerBattle ? trainerActions(a.uid) : wildActions(state.current, rng.current, nextWild?.uid, a.uid);
     const before = state.current.foes.filter(f => f.fainted).map(f => f.uid);
     const events = resolveRound(state.current, [action, ...foeActs], rng.current);
     await api.play(events);
@@ -215,9 +225,9 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     if (!aliveFoes().length) { await finishBattle(); return; }
     startTurn();
   }
-  function trainerActions(): BattleAction[] {
+  function trainerActions(targetUid: string): BattleAction[] {
     const foes = aliveFoes(); const allies = aliveAllies(); if (!foes.length || !allies.length) return [];
-    const f = nextWild && !nextWild.fainted ? nextWild : foes[0]; const t = allies[Math.floor(rng.current() * allies.length)];
+    const f = nextWild && !nextWild.fainted ? nextWild : foes[0]; const t = allies.find(x => x.uid === targetUid) ?? allies[0];
     return [{ battlerUid: f.uid, moveId: aiChoose(f, t, rng.current), targetUid: t.uid, roulette: 4 + Math.floor(rng.current() * 5) }];
   }
 
@@ -287,7 +297,8 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
   const eff = attacker && target ? typeMultiplier(getMove(attacker.moves[0]).type, getSpecies(target.speciesId).types) : 1;
   return (
     <div className="screen full">
-      <BattleStage api={api} bg={area.bg} myOwnerId={player.id} select={{ targetUid, attackerUid, tiredUids: tiredUid ? [tiredUid] : [], line: canChoose ? (iAmFaster ? 'blue' : 'red') : null, showMatchup: canChoose, onSelectFoe: canChoose ? uid => { setTargetUid(uid); sfx.click(); } : undefined, onSelectAlly: canChoose ? uid => { setAttackerUid(uid); sfx.click(); } : undefined }}>
+      <BattleStage api={api} bg={area.bg} myOwnerId={player.id} select={{ targetUid, attackerUid, tiredUids: tiredUid ? [tiredUid] : [], line: canChoose ? (iAmFaster ? 'blue' : 'red') : null, showMatchup: canChoose, duel: nextWild && phase !== 'intro' && phase !== 'trainerOffer' ? { allyUid: attackerUid, foeUid: nextWild.uid } : null, onSelectAlly: canChoose ? uid => chooseAttacker(uid) : undefined }}>
+        {canChoose && <div className="vs">VS</div>}
         {phase === 'special' && attacker && <SpecialChance kind={team.find(p => p.uid === attacker.uid)!.mark!} onDone={onSpecial} />}
         {phase === 'mash' && <MashChance onDone={onMash} />}
         {phase === 'roulette' && <AttackRoulette tired={attackerUid === tiredUid} onDone={onRoulette} />}
@@ -302,14 +313,14 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
           <>
             <div className="row between small" style={{ marginBottom: 8 }}>
               <span>前に出す: <b>{attacker.name}</b>{attackerUid === tiredUid && ' 💤つかれ'}</span>
-              <span>あいて: <b>{target.name}</b></span>
+              <span>あいて: <b>{target.name}</b>（じどう）</span>
             </div>
             <div className="row between small" style={{ marginBottom: 8 }}>
               <span className={`badge`} style={{ background: eff >= 2 ? 'var(--accent2)' : eff === 0 ? '#333' : eff < 1 ? '#555' : undefined, color: eff >= 2 ? '#3b2a00' : undefined }}>{getMove(attacker.moves[0]).ja} → {eff >= 2 ? 'ばつぐん！' : eff === 0 ? 'こうかなし' : eff < 1 ? 'いまひとつ' : 'ふつう'}</span>
               <span className="badge" style={{ color: iAmFaster ? 'var(--info)' : 'var(--accent)' }}>{iAmFaster ? '🔵 こちらが せんこう' : '🔴 あいてが せんこう'}</span>
             </div>
             <div className="grid3" style={{ marginBottom: 8 }}>
-              {state.current!.allies.map(a => <button key={a.uid} className={`pokecard ${a.uid === attackerUid ? 'sel' : ''} ${a.fainted ? 'dim' : ''}`} style={{ padding: 6 }} disabled={a.fainted} onClick={() => { setAttackerUid(a.uid); sfx.click(); }}><Sprite id={a.speciesId} shiny={a.shiny} size={40} /><span className="nm" style={{ fontSize: 11 }}>{a.name}{a.uid === tiredUid && ' 💤'}</span><span className="small" style={{ fontSize: 10, color: TYPE_COLOR[getMove(a.moves[0]).type], fontWeight: 900 }}>{getMove(a.moves[0]).ja}</span></button>)}
+              {state.current!.allies.map(a => <button key={a.uid} className={`pokecard ${a.uid === attackerUid ? 'sel' : ''} ${a.fainted ? 'dim' : ''}`} style={{ padding: 6 }} disabled={a.fainted} onClick={() => chooseAttacker(a.uid)}><Sprite id={a.speciesId} shiny={a.shiny} size={40} /><span className="nm" style={{ fontSize: 11 }}>{a.name}{a.uid === tiredUid && ' 💤'}</span><span className="small" style={{ fontSize: 10, color: TYPE_COLOR[getMove(a.moves[0]).type], fontWeight: 900 }}>{getMove(a.moves[0]).ja}</span></button>)}
             </div>
             <button className="btn primary lg block" onClick={beginAttack}>⚔️ こうげき！</button>
           </>

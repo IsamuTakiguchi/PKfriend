@@ -133,11 +133,11 @@ export function bossActions(state: BattleState, rng: Rng): BattleAction[] {
 }
 
 /** Wild team (3 vs 3): one wild pokémon attacks per round, with a modest random roulette number. */
-export function wildActions(state: BattleState, rng: Rng, preferUid?: string): BattleAction[] {
+export function wildActions(state: BattleState, rng: Rng, preferUid?: string, targetUid?: string): BattleAction[] {
   const wilds = alive(state.foes).filter(f => !f.isBoss); const targets = alive(state.allies);
   if (!wilds.length || !targets.length) return [];
   const w = wilds.find(x => x.uid === preferUid) ?? wilds[Math.floor(rng() * wilds.length)];
-  const t = targets[Math.floor(rng() * targets.length)];
+  const t = targets.find(x => x.uid === targetUid) ?? targets[Math.floor(rng() * targets.length)];
   return [{ battlerUid: w.uid, moveId: aiChoose(w, t, rng), targetUid: t.uid, roulette: 2 + Math.floor(rng() * 5) }];
 }
 
