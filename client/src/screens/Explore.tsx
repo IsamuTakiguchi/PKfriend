@@ -339,7 +339,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
       {phase === 'result' && !evolving && !evo && (
         <Modal>
           <h2 className="center">{caught.length ? `🎉 ${caught.length}匹 ゲット！` : defeated.current.length ? 'バトル しゅうりょう' : 'ざんねん…'}</h2>
-          {caught.length > 0 && <div className="row" style={{ justifyContent: 'center', gap: 8, overflowX: 'auto' }}>{caught.map(p => <div key={p.uid} style={{ transform: 'scale(.8)', transformOrigin: 'top center', flexShrink: 0 }}><PickCard p={p} /></div>)}</div>}
+          {caught.length > 0 && <div className="row" style={{ justifyContent: caught.length > 1 ? 'flex-start' : 'center', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>{caught.map(p => <div key={p.uid} style={{ width: 190, height: 268, flexShrink: 0 }}><div style={{ transform: 'scale(.72)', transformOrigin: 'top left', width: 260 }}><PickCard p={p} /></div></div>)}</div>}
           <p className="small muted center">けいけんち +{expTotal}{levelUps.length > 0 && ' ／ レベルアップ！'}{team.some(t => t.origin === 'rental') && ' ／ レンタルポケモンは かえした'}</p>
           <button className="btn primary block" onClick={onExit}>つづける</button>
         </Modal>
