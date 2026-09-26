@@ -7,7 +7,7 @@ name: Deploy
 #   4. Render         : Secrets に RENDER_DEPLOY_HOOK_URL を入れると Render 側の再デプロイも起動
 on:
   push:
-    branches: [main, 'claude/pokemon-blender-app-zfkrfp']  # TEMP: verify the pipeline from the feature branch
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -101,12 +101,12 @@ jobs:
         run: |
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           url="https://${owner}.github.io${{ needs.setup.outputs.base }}"
-          for i in $(seq 1 30); do
+          for i in $(seq 1 9); do
             code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
             if [ "$code" = "200" ]; then echo "::notice::PWA is live at $url"; exit 0; fi
             sleep 20
           done
-          echo "::warning::$url is not reachable yet (Pages may still be building, or enable it once in Settings -> Pages -> Branch: gh-pages)."
+          echo "::warning::$url is not reachable yet. First time only: Settings -> Pages -> Source: Deploy from a branch -> gh-pages / (root). After that every push updates the site automatically."
 
   # ---------------------------------------------------------------- 3. コンテナイメージ (GHCR)
   image:

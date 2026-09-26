@@ -52,12 +52,16 @@ docker run -p 8787:8787 pkfriend
 
 | 先 | 内容 | 必要な設定 |
 | --- | --- | --- |
-| **GitHub Pages** | PWA クライアントを `https://<owner>.github.io/<repo>/` に配信。たんけん・ボックス・ずかんはこれだけで遊べる | なし（ワークフローが Pages を自動で有効化） |
+| **GitHub Pages** | PWA クライアントを `https://<owner>.github.io/<repo>/` に配信。たんけん・ボックス・ずかんはこれだけで遊べる | 初回のみ **Settings → Pages → Source: Deploy from a branch → `gh-pages` / (root)** を選ぶ（成果物は毎回ワークフローが `gh-pages` ブランチへ自動 push） |
 | **GHCR** | サーバー入りコンテナ `ghcr.io/<owner>/pkfriend:latest` を公開。VPS や他の PaaS から pull できる | なし |
 | **Fly.io** | サーバー本体（WebSocket）＋クライアントを `https://<repo>-<owner>.fly.dev` で公開。こうかん・みんなでバトルはこれで動く | Secrets に `FLY_API_TOKEN` |
 | **Render** | Render 側の再デプロイを起動 | Secrets に `RENDER_DEPLOY_HOOK_URL`（`render.yaml` で Blueprint 作成後に取得） |
 
 Pages 版のクライアントは、ビルド時に Fly のアドレス（`wss://<repo>-<owner>.fly.dev/ws`）をサーバーとして埋め込みます。Fly を使わず別のサーバーにつなぐ場合は、リポジトリの **Variables** に `PUBLIC_WS_URL`（例: `wss://example.com/ws`）を設定してください。Fly のアプリ名を変えたいときは Variables の `FLY_APP_NAME`、組織を変えるときは `FLY_ORG` を設定します。
+
+### 初回だけ必要な設定
+
+**GitHub Pages**: リポジトリの **Settings → Pages** で Source を「Deploy from a branch」、Branch を `gh-pages` / `(root)` にして Save。数十秒後に `https://<owner>.github.io/<repo>/` で開けます（このリポジトリなら https://isamutakiguchi.github.io/PKfriend/ ）。
 
 ### Fly.io を有効にする手順（1回だけ）
 
