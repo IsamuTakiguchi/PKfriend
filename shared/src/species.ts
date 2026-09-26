@@ -1,5 +1,5 @@
 import { POKEMON_DATA } from './data/pokemon.data.js';
-import type { Species, BaseStats, TypeName, OwnedPokemon } from './types.js';
+import type { Species, BaseStats, TypeName, OwnedPokemon, SpecialKind } from './types.js';
 import { movesFor } from './moves.js';
 import type { Rng } from './rng.js';
 import { randInt } from './rng.js';
@@ -68,14 +68,39 @@ export function newUid(prefix = 'p'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}_${uidCounter.toString(36)}`;
 }
 
-export function createOwned(opts: { speciesId: number; level: number; rng: Rng; ownerId: string; ownerName: string; origin: OwnedPokemon['origin']; shiny?: boolean }): OwnedPokemon {
+export const SPECIAL_KINDS: SpecialKind[] = ['tera', 'z', 'mega', 'tag', 'dyna'];
+export const SPECIAL_JA: Record<SpecialKind, string> = { tera: 'テラスタル', z: 'Zワザ', mega: 'メガシンカ', tag: 'タッグわざ', dyna: 'ダイマックス' };
+export const MARK_RATE = 0.3;
+
+export function createOwned(opts: { speciesId: number; level: number; rng: Rng; ownerId: string; ownerName: string; origin: OwnedPokemon['origin']; shiny?: boolean; mark?: SpecialKind | null }): OwnedPokemon {
   const s = getSpecies(opts.speciesId);
   const level = Math.max(1, Math.min(MAX_LEVEL, opts.level));
+  const mark = opts.mark === null ? undefined : opts.mark ?? (opts.rng() < MARK_RATE ? SPECIAL_KINDS[Math.floor(opts.rng() * SPECIAL_KINDS.length)] : undefined);
   return {
     uid: newUid(), speciesId: s.id, exp: expForLevel(level), ivs: randomIvs(opts.rng),
-    moves: movesFor(s.id, s.types, level), shiny: opts.shiny ?? opts.rng() < SHINY_RATE,
+    moves: movesFor(s.id, s.types, level), shiny: opts.shiny ?? opts.rng() < SHINY_RATE, mark,
     caughtAt: Date.now(), caughtBy: opts.ownerId, caughtByName: opts.ownerName, origin: opts.origin,
   };
 }
+
+// ----- pick info (Frienda style) -----
+export const bst = (s: Species) => Object.values(s.stats).reduce((a, b) => a + b, 0);
+/** ★2〜★5 grade. ★5 = legendary / very strong, ★4 = treasure, ★3 = evolved, ★2 = basic. */
+export function gradeOf(speciesId: number): 2 | 3 | 4 | 5 {
+  const s = getSpecies(speciesId); const t = bst(s);
+  if (s.legendary || t >= 580) return 5;
+  if (t >= 490) return 4;
+  if (t >= 380) return 3;
+  return 2;
+}
+/** ポケエネ: single "power" number shown on the pick. */
+export function pokeEne(p: { speciesId: number; exp: number; ivs: BaseStats }): number {
+  const s = getSpecies(p.speciesId); const lv = levelFromExp(p.exp); const st = calcStats(s.stats, p.ivs, lv);
+  return Math.round((st.hp + st.atk + st.def + st.spa + st.spd + st.spe) * 1.6 + lv * 4);
+}
+/** すばやさレベル 1..10 from the speed stat. */
+export function speedLevel(spe: number): number { return Math.max(1, Math.min(10, Math.ceil(spe / 18))); }
+/** The pick's main わざ. */
+export function mainMove(p: { moves: string[] }): string { return p.moves[0]; }
 
 export function displayName(p: { nickname?: string; speciesId: number }): string { return p.nickname || getSpecies(p.speciesId).ja; }

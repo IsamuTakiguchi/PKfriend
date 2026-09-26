@@ -1,4 +1,5 @@
 import type { Battler, BattleEvent, BattleState, OwnedPokemon, Player } from './types.js';
+import type { BallKind } from './catch.js';
 
 export type RoomKind = 'battle' | 'trade';
 
@@ -12,6 +13,9 @@ export interface BattleRoomView {
   pendingUids: string[];          // battlers that still need to choose this round
   roundDeadline: number | null;   // epoch ms
   catchResults: Record<string, { success: boolean; shakes: number; pokemon?: OwnedPokemon }>;
+  /** ball each participant stopped on the ボールルーレット; the best one is used for everybody */
+  ballChoices: Record<string, BallKind>;
+  chosenBall: BallKind | null;
   expGain: number;
 }
 
@@ -31,8 +35,8 @@ export type ClientMsg =
   | { t: 'leave_room' }
   | { t: 'battle_select'; pokemon: OwnedPokemon }       // pick / swap the pokémon you fight with
   | { t: 'battle_start' }                                // host only
-  | { t: 'battle_action'; moveId: string }
-  | { t: 'catch_attempt'; timing: number }
+  | { t: 'battle_action'; moveId: string; roulette?: number; special?: import('./types.js').SpecialKind }
+  | { t: 'catch_attempt'; ball: BallKind }
   | { t: 'emote'; emote: string }
   | { t: 'trade_offer'; pokemon: OwnedPokemon | null }
   | { t: 'trade_confirm'; confirmed: boolean }
@@ -44,7 +48,7 @@ export type ServerMsg =
   | { t: 'left' }
   | { t: 'round'; events: BattleEvent[]; state: BattleState; roundDeadline: number | null; pendingUids: string[] }
   | { t: 'joined_battle'; battler: Battler; playerName: string }
-  | { t: 'catch_result'; playerId: string; success: boolean; shakes: number; pokemon?: OwnedPokemon }
+  | { t: 'catch_result'; playerId: string; success: boolean; shakes: number; pokemon?: OwnedPokemon; ball: BallKind }
   | { t: 'emote'; playerId: string; playerName: string; emote: string }
   | { t: 'trade_done'; received: OwnedPokemon; gaveUid: string; partner: Player }
   | { t: 'error'; message: string }

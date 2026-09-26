@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { SPECIES, levelFromExp, displayName, getSpecies } from '@pkfriend/shared';
+import { SPECIES, levelFromExp, displayName, getSpecies, movesFor } from '@pkfriend/shared';
 import { useStore, useLead } from '../store';
 import { Sprite, Modal, ExpBar, Types } from '../components/ui';
 import { useNet } from '../net';
 
 export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void }) {
   const player = useStore(s => s.player)!; const box = useStore(s => s.box); const caught = useStore(s => s.caught); const seen = useStore(s => s.seen);
-  const stats = useStore(s => s.stats); const sound = useStore(s => s.sound); const toggleSound = useStore(s => s.toggleSound); const bgm = useStore(s => s.bgm); const toggleBgm = useStore(s => s.toggleBgm); const setPlayer = useStore(s => s.setPlayer); const resetAll = useStore(s => s.resetAll);
+  const stats = useStore(s => s.stats); const sound = useStore(s => s.sound); const toggleSound = useStore(s => s.toggleSound); const bgm = useStore(s => s.bgm); const toggleBgm = useStore(s => s.toggleBgm); const setPlayer = useStore(s => s.setPlayer); const resetAll = useStore(s => s.resetAll); const updatePokemon = useStore(s => s.updatePokemon);
+  const starter = box.find(p => p.origin === 'starter');
+  const [changeStarter, setChangeStarter] = useState(false);
   const status = useNet(s => s.status);
   const lead = useLead();
   const [edit, setEdit] = useState(false); const [name, setName] = useState(player.name); const [confirmReset, setConfirmReset] = useState(false);
@@ -31,6 +33,7 @@ export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void 
       <button className="area" style={{ background: 'linear-gradient(135deg,#56ab2f,#a8e063)' }} onClick={() => go('explore')}><h2>🌿 たんけんに いく</h2><span className="small">やせいの ポケモンを みつけて ゲット！</span></button>
       <button className="area" style={{ background: 'linear-gradient(135deg,#cb2d3e,#ef473a)' }} onClick={() => go('friends')}><h2>⚔️ みんなで バトル</h2><span className="small">ともだちと いっしょに ボスに いどもう。とちゅう さんせんも OK！</span></button>
       <button className="area" style={{ background: 'linear-gradient(135deg,#185a9d,#43cea2)' }} onClick={() => go('friends')}><h2>🔁 ともだちと こうかん</h2><span className="small">6けたの コードで つながって ポケモンを こうかん。</span></button>
+      {starter && <button className="card row between" style={{ width: '100%', textAlign: 'left' }} onClick={() => setChangeStarter(true)}><span>🔄 さいしょの パートナーを かえる</span><span className="small muted">いまは {getSpecies(starter.speciesId).ja} ›</span></button>}
       <div className="card stack" style={{ gap: 8 }}>
         <div className="row between"><span>🎵 BGM</span><button className={`btn sm ${bgm ? 'gold' : ''}`} onClick={toggleBgm}>{bgm ? 'ON' : 'OFF'}</button></div>
         <div className="row between"><span>🔊 こうかおん</span><button className={`btn sm ${sound ? 'gold' : ''}`} onClick={toggleSound}>{sound ? 'ON' : 'OFF'}</button></div>
@@ -44,6 +47,12 @@ export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void 
             <button className="btn primary block" onClick={() => { if (name.trim()) setPlayer({ ...player, name: name.trim() }); setEdit(false); }}>けってい</button>
             {lead && <div className="row small muted">パートナーのタイプ: <Types id={lead.speciesId} /> {getSpecies(lead.speciesId).genus}</div>}
           </div>
+        </Modal>
+      )}
+      {changeStarter && starter && (
+        <Modal title="パートナーを えらびなおす" onClose={() => setChangeStarter(false)}>
+          <p className="small muted">レベルと けいけんちは そのまま。サポートポケモン（ついげき）も この ポケモンに なる。</p>
+          <div className="grid4">{[1, 4, 7, 25].map(id => <button key={id} className={`pokecard ${starter.speciesId === id ? 'sel' : ''}`} onClick={() => { const s = getSpecies(id); updatePokemon(starter.uid, { speciesId: id, moves: movesFor(id, s.types, levelFromExp(starter.exp)), nickname: undefined }); setPlayer({ ...player, avatarSpeciesId: id }); setChangeStarter(false); }}><Sprite id={id} size={56} /><span className="nm">{getSpecies(id).ja}</span><Types id={id} /></button>)}</div>
         </Modal>
       )}
       {confirmReset && (

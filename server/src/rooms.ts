@@ -3,7 +3,8 @@ import {
   type Player, type OwnedPokemon, type Battler, type BattleState, type BattleAction, type BattleEvent,
   type BattleRoomView, type TradeRoomView, type RoomMember, type ServerMsg,
   makeRng, randomSeed, getSpecies, wildBattler, battlerFromOwned, newBattle, resolveRound, bossActions,
-  rollCatch, createOwned, expGain, bossPool, pick, ROUND_SECONDS, MAX_RAID_MEMBERS,
+  rollCatchBall, bestBall, createOwned, expGain, bossPool, pick, ROUND_SECONDS, MAX_RAID_MEMBERS,
+  type BallKind, type SpecialKind,
 } from '@pkfriend/shared';
 
 export interface Client { ws: WebSocket; player: Player; roomCode: string | null; }
@@ -41,6 +42,9 @@ export class BattleRoom extends Room {
   roundDeadline: number | null = null;
   timer: ReturnType<typeof setTimeout> | null = null;
   catchResults: BattleRoomView['catchResults'] = {};
+  ballChoices: Record<string, BallKind> = {};
+  chosenBall: BallKind | null = null;
+  catchTimer: ReturnType<typeof setTimeout> | null = null;
   expGainValue = 0;
 
   constructor(code: string, host: Client, difficulty: 1 | 2 | 3 = 1, bossSpeciesId?: number) {
@@ -54,7 +58,7 @@ export class BattleRoom extends Room {
   view(): BattleRoomView {
     return {
       code: this.code, kind: 'battle', hostId: this.hostId, members: this.memberViews(), phase: this.phase, boss: this.boss ?? this.previewBoss(),
-      difficulty: this.difficulty, state: this.state, pendingUids: this.pendingUids(), roundDeadline: this.roundDeadline, catchResults: this.catchResults, expGain: this.expGainValue,
+      difficulty: this.difficulty, state: this.state, pendingUids: this.pendingUids(), roundDeadline: this.roundDeadline, catchResults: this.catchResults, ballChoices: this.ballChoices, chosenBall: this.chosenBall, expGain: this.expGainValue,
     };
   }
 
@@ -107,12 +111,13 @@ export class BattleRoom extends Room {
     this.timer = setTimeout(() => this.resolve(), ROUND_SECONDS * 1000 + 200);
   }
 
-  action(c: Client, moveId: string) {
+  action(c: Client, moveId: string, roulette?: number, special?: SpecialKind) {
     if (this.phase !== 'battle' || !this.state) return;
     const b = this.state.allies.find(a => a.ownerId === c.player.id && !a.fainted);
     if (!b) return;
     if (!b.moves.includes(moveId)) return this.send(c, { t: 'error', message: 'そのわざは つかえません' });
-    this.actions.set(b.uid, { battlerUid: b.uid, moveId, targetUid: this.boss!.uid });
+    const r = roulette === undefined ? undefined : Math.max(1, Math.min(10, Math.round(Number(roulette) || 5)));
+    this.actions.set(b.uid, { battlerUid: b.uid, moveId, targetUid: this.boss!.uid, roulette: r, special });
     this.touch();
     if (this.pendingUids().length === 0) this.resolve();
     else this.sync();
@@ -122,7 +127,11 @@ export class BattleRoom extends Room {
     if (this.phase !== 'battle' || !this.state) return;
     if (this.timer) { clearTimeout(this.timer); this.timer = null; }
     // auto-pick for anyone who didn't choose
-    for (const a of this.state.allies) if (!a.fainted && !this.actions.has(a.uid)) this.actions.set(a.uid, { battlerUid: a.uid, moveId: pick(this.rng, a.moves), targetUid: this.boss!.uid });
+    for (const a of this.state.allies) if (!a.fainted && !this.actions.has(a.uid)) this.actions.set(a.uid, { battlerUid: a.uid, moveId: a.moves[0], targetUid: this.boss!.uid, roulette: 3 });
+    // タッグバトルのルール: みんなが出した数字のうち いちばん大きい数字が つかわれる
+    const nums = [...this.actions.values()].map(a => a.roulette ?? 5);
+    const maxR = Math.max(...nums);
+    for (const a of this.actions.values()) a.roulette = maxR;
     const acts = [...this.actions.values(), ...bossActions(this.state, this.rng)];
     const events: BattleEvent[] = resolveRound(this.state, acts, this.rng);
     this.roundDeadline = null;
@@ -142,19 +151,35 @@ export class BattleRoom extends Room {
     this.sync();
   }
 
-  catchAttempt(c: Client, timing: number) {
+  private participants(): string[] { return [...new Set(this.state!.allies.map(a => a.ownerId))].filter(pid => this.members.has(pid)); }
+
+  catchAttempt(c: Client, ball: BallKind) {
     if (this.phase !== 'catch' || !this.boss) return;
-    if (this.catchResults[c.player.id]) return;
-    const participated = this.state!.allies.some(a => a.ownerId === c.player.id);
-    if (!participated) return this.send(c, { t: 'error', message: 'バトルに さんかしていません' });
-    const t = Math.max(0, Math.min(1, Number(timing) || 0));
-    const r = rollCatch(this.boss, t, this.rng, { bonus: 0.5 * this.difficulty });
-    let pokemon: OwnedPokemon | undefined;
-    if (r.success) pokemon = createOwned({ speciesId: this.boss.speciesId, level: this.boss.level, rng: this.rng, ownerId: c.player.id, ownerName: c.player.name, origin: 'raid', shiny: this.boss.shiny });
-    this.catchResults[c.player.id] = { success: r.success, shakes: r.shakes, pokemon };
-    this.broadcast({ t: 'catch_result', playerId: c.player.id, success: r.success, shakes: r.shakes, pokemon });
-    const participants = new Set(this.state!.allies.map(a => a.ownerId));
-    if ([...participants].every(pid => this.catchResults[pid] || !this.members.has(pid))) this.phase = 'done';
+    if (this.chosenBall) return;
+    if (!this.state!.allies.some(a => a.ownerId === c.player.id)) return this.send(c, { t: 'error', message: 'バトルに さんかしていません' });
+    const b: BallKind = (['monster', 'super', 'hyper', 'master'] as BallKind[]).includes(ball) ? ball : 'monster';
+    this.ballChoices[c.player.id] = b;
+    this.touch();
+    if (!this.catchTimer) this.catchTimer = setTimeout(() => this.resolveCatch(), 25_000);
+    if (this.participants().every(pid => this.ballChoices[pid])) this.resolveCatch(); else this.sync();
+  }
+
+  /** タッグバトルのルール: みんなのボールのうち いちばん せいのうの良いボールで 1回だけ なげる。つかまえたら ぜんいんが ピックを ゲット。 */
+  private resolveCatch() {
+    if (this.phase !== 'catch' || !this.boss || this.chosenBall) return;
+    if (this.catchTimer) { clearTimeout(this.catchTimer); this.catchTimer = null; }
+    const parts = this.participants();
+    const balls = parts.map(pid => this.ballChoices[pid]).filter(Boolean) as BallKind[];
+    const ball = bestBall(balls.length ? balls : ['monster']);
+    this.chosenBall = ball;
+    const r = rollCatchBall(this.boss, ball, this.rng, { bonus: 0.3 * this.difficulty });
+    for (const pid of parts) {
+      const m = this.members.get(pid)!;
+      const pokemon = r.success ? createOwned({ speciesId: this.boss.speciesId, level: this.boss.level, rng: this.rng, ownerId: pid, ownerName: m.client.player.name, origin: 'raid', shiny: this.boss.shiny }) : undefined;
+      this.catchResults[pid] = { success: r.success, shakes: r.shakes, pokemon };
+      this.broadcast({ t: 'catch_result', playerId: pid, success: r.success, shakes: r.shakes, pokemon, ball });
+    }
+    this.phase = 'done';
     this.sync();
   }
 
@@ -168,7 +193,7 @@ export class BattleRoom extends Room {
     }
     this.sync();
   }
-  dispose() { if (this.timer) clearTimeout(this.timer); }
+  dispose() { if (this.timer) clearTimeout(this.timer); if (this.catchTimer) clearTimeout(this.catchTimer); }
 }
 
 // ---------------------------------------------------------------- trade room

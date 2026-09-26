@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { artworkUrl, getSpecies, TYPE_COLOR, TYPE_JA, levelFromExp, displayName, expToNext, type TypeName, type OwnedPokemon } from '@pkfriend/shared';
+import { artworkUrl, getSpecies, getMove, TYPE_COLOR, TYPE_JA, levelFromExp, displayName, expToNext, gradeOf, pokeEne, speedLevel, calcStats, SPECIAL_JA, type TypeName, type OwnedPokemon } from '@pkfriend/shared';
 import { useToast } from '../toast';
 
 export function Sprite({ id, shiny, size = 96, className = '', silhouette = false, style }: { id: number; shiny?: boolean; size?: number | string; className?: string; silhouette?: boolean; style?: React.CSSProperties }) {
@@ -27,6 +27,8 @@ export function PokeCard({ p, selected, onClick, dim, tag, size = 72 }: { p: Own
       <Sprite id={p.speciesId} shiny={p.shiny} size={size} />
       <span className="nm">{displayName(p)}</span>
       <Types id={p.speciesId} />
+      <span className="small" style={{ fontSize: 10, color: TYPE_COLOR[getMove(p.moves[0]).type], fontWeight: 900 }}>{getMove(p.moves[0]).ja}</span>
+      {p.mark && <Mark p={p} />}
       {tag && <span className="badge" style={{ marginTop: 2 }}>{tag}</span>}
     </button>
   );
@@ -49,18 +51,25 @@ export function Toasts() {
 }
 
 /** Frienda-pick style collectable card shown when you catch / receive a pokémon. */
+export const ORIGIN_JA: Record<OwnedPokemon['origin'], string> = { wild: 'バトルでゲット', raid: 'タッグバトル', trade: 'ともだちと こうかん', starter: 'さいしょのパートナー', rental: 'レンタル', bonus: 'ボーナスゲット', exchange: 'こうかんチャンス' };
+export function Grade({ id }: { id: number }) { const g = gradeOf(id); return <span className="grade" title={`グレード ★${g}`}>{'★'.repeat(g)}<span style={{ opacity: .25 }}>{'★'.repeat(5 - g)}</span></span>; }
+export function Mark({ p }: { p: { mark?: OwnedPokemon['mark'] } }) { return p.mark ? <span className="mark">{{ tera: '💎', z: '🌀', mega: '🧬', tag: '🤝', dyna: '🔺' }[p.mark]} {SPECIAL_JA[p.mark]}</span> : null; }
+
+/** Frienda-pick style collectable card shown when you catch / receive a pokémon. */
 export function PickCard({ p }: { p: OwnedPokemon }) {
   const s = getSpecies(p.speciesId);
   const c1 = TYPE_COLOR[s.types[0]], c2 = TYPE_COLOR[s.types[1] ?? s.types[0]];
+  const lv = levelFromExp(p.exp); const st = calcStats(s.stats, p.ivs, lv); const mv = getMove(p.moves[0]); const g = gradeOf(p.speciesId);
   return (
-    <div className={`pick ${p.shiny ? 'shiny' : ''}`} style={{ '--c1': c1, '--c2': c2 } as React.CSSProperties}>
+    <div className={`pick ${p.shiny || g === 5 ? 'shiny' : ''}`} style={{ '--c1': c1, '--c2': c2 } as React.CSSProperties}>
       <div className="inner">
-        <div className="row between" style={{ width: '100%', fontSize: 11, fontWeight: 900, color: '#444' }}><span>No.{String(s.id).padStart(3, '0')}</span><span>Lv.{levelFromExp(p.exp)} {p.shiny && '✨'}</span></div>
-        <Sprite id={p.speciesId} shiny={p.shiny} size="70%" />
+        <div className="row between" style={{ width: '100%', fontSize: 11, fontWeight: 900, color: '#444' }}><span>No.{String(s.id).padStart(3, '0')} <Grade id={s.id} /></span><span>Lv.{lv} {p.shiny && '✨'}</span></div>
+        <Sprite id={p.speciesId} shiny={p.shiny} size="62%" />
         <div className="name">{displayName(p)}</div>
-        <div style={{ fontSize: 11, color: '#555' }}>{s.genus}</div>
-        <Types id={p.speciesId} />
-        <div className="meta">トレーナー: {p.caughtByName}<br />{new Date(p.caughtAt).toLocaleDateString('ja-JP')} / {p.origin === 'raid' ? 'みんなでバトル' : p.origin === 'trade' ? 'こうかん' : p.origin === 'starter' ? 'さいしょのパートナー' : 'やせい'}</div>
+        <div className="row" style={{ gap: 6, fontSize: 11, color: '#333', fontWeight: 900 }}><span>ポケエネ {pokeEne(p)}</span><span>すばやさLv.{speedLevel(st.spe)}</span></div>
+        <div className="row" style={{ gap: 4 }}><Types id={p.speciesId} /><Mark p={p} /></div>
+        <div style={{ fontSize: 12, fontWeight: 900, color: '#222', background: 'rgba(0,0,0,.06)', borderRadius: 8, padding: '3px 8px' }}><span style={{ color: TYPE_COLOR[mv.type] }}>●</span> わざ: {mv.ja}（{TYPE_JA[mv.type]} / いりょく{mv.power || '—'}）</div>
+        <div className="meta">トレーナー: {p.caughtByName}<br />{new Date(p.caughtAt).toLocaleDateString('ja-JP')} / {ORIGIN_JA[p.origin] ?? 'やせい'}</div>
       </div>
     </div>
   );

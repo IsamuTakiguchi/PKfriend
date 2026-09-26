@@ -6,4 +6,5 @@ export * from './species.js';
 export * from './battle.js';
 export * from './catch.js';
 export * from './areas.js';
+export * from './trainers.js';
 export * from './protocol.js';

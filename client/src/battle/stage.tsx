@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { getMove, getSpecies, artworkUrl, TYPE_COLOR, effectivenessText, type Battler, type BattleEvent, type StatStages, type MoveFx } from '@pkfriend/shared';
+import { getMove, getSpecies, artworkUrl, TYPE_COLOR, effectivenessText, typeMultiplier, SPECIAL_JA, type Battler, type BattleEvent, type StatStages, type MoveFx } from '@pkfriend/shared';
 import { FxEngine } from './effects';
 import { sfx } from '../audio';
 import { HpBar, Sprite } from '../components/ui';
@@ -120,6 +120,9 @@ export function useBattleStage(): StageApi {
         case 'swap': { setView(x => ({ ...x, allies: x.allies.map(a => a.uid === e.outUid ? { ...e.battler } : a) })); sfx.join(); await banner(`いけっ！ ${e.battler.name}！`, 'info', 900 / sp); break; }
         case 'boss_enrage': { const b = nameOf(v, e.bossUid); flash('on dark'); shake(true); sfx.enrage(); setClass(e.bossUid, 'charge', 900); await banner(`${b?.name ?? 'ボス'}は いかりくるった！`, 'big', 1300 / sp); break; }
         case 'chain': { sfx.chain(); flash('on crit'); await banner(`チェイン ×${e.count}！`, 'gold', 700 / sp); break; }
+        case 'special': { const u = nameOf(v, e.userUid); sfx.cutin(); flash('on crit'); setClass(e.userUid, 'charge', 900); if (u) setView(x => ({ ...x, cutin: { moveId: getMove(u.moves[0]).id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await banner(`${u?.name ?? ''}の ${SPECIAL_JA[e.special]}！`, 'gold', 1000 / sp); setView(x => ({ ...x, cutin: null })); break; }
+        case 'assist': { const pt = nameOf(v, e.partnerUid); if (pt) { setClass(pt.uid, pt.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(220); playFx(getMove(pt.moves[0]).fx, pt.uid, e.targetUid, TYPE_COLOR[getMove(pt.moves[0]).type]); sfx.hit(); setClass(e.targetUid, 'hit', 500); shake(false); pop(e.targetUid, `${e.amount}`, 'super'); updateB(e.targetUid, { hp: e.hpAfter }); await banner(`${pt.name}の タッグアタック！`, 'info', 800 / sp); } break; }
+        case 'support': { sfx.slash(); playFx('impact', e.targetUid, e.targetUid, '#ffc371'); setClass(e.targetUid, 'hit', 500); shake(false); pop(e.targetUid, `${e.amount}`, 'heal'); updateB(e.targetUid, { hp: e.hpAfter }); await banner(`サポートの ${e.name}が ついげき！`, 'info', 800 / sp); break; }
         case 'battle_end': { if (e.winner === 'ally') { sfx.victory(); await banner('WIN！', 'gold', 1600 / sp); } else { sfx.lose(); await banner('まけてしまった…', '', 1600 / sp); } break; }
       }
     }
@@ -132,24 +135,40 @@ export function useBattleStage(): StageApi {
 // ------------------------------------------------------------------ presentational stage
 export interface EmoteBubble { id: number; playerId: string; emote: string; }
 
-export function BattleStage({ api, bg, myOwnerId, pendingUids = [], emotes = [], children }: { api: StageApi; bg: string; myOwnerId?: string; pendingUids?: string[]; emotes?: EmoteBubble[]; children?: React.ReactNode }) {
+export interface StageSelect {
+  targetUid?: string | null;            // highlighted foe
+  attackerUid?: string | null;          // highlighted ally
+  tiredUids?: string[];                 // allies that attacked last turn
+  onSelectFoe?: (uid: string) => void;
+  onSelectAlly?: (uid: string) => void;
+  line?: 'blue' | 'red' | null;         // speed line between attacker and target
+  showMatchup?: boolean;                // show ばつぐん/いまひとつ tags on foes for the selected attacker
+}
+
+export function BattleStage({ api, bg, myOwnerId, pendingUids = [], emotes = [], select = {}, children }: { api: StageApi; bg: string; myOwnerId?: string; pendingUids?: string[]; emotes?: EmoteBubble[]; select?: StageSelect; children?: React.ReactNode }) {
   const v = api.view;
   const allyN = Math.max(1, v.allies.length);
+  const foeN = Math.max(1, v.foes.length);
   const allySize = allyN === 1 ? 150 : allyN === 2 ? 120 : 96;
-  const foeSize = v.foes[0]?.isBoss ? 210 : 160;
+  const foeSize = v.foes[0]?.isBoss ? 210 : foeN === 1 ? 160 : foeN === 2 ? 120 : 96;
+  const attacker = select.attackerUid ? v.allies.find(a => a.uid === select.attackerUid) : undefined;
+  const [lineFrom, lineTo] = select.line && select.attackerUid && select.targetUid ? [api.posOf(select.attackerUid), api.posOf(select.targetUid)] : [null, null];
   return (
     <div ref={api.refs.root} className={`stage ${v.shake}`}>
       <div className="bg" style={{ background: bg }} />
       <div className="zoom" style={{ transform: v.zoom }}>
-        {v.foes.map((f, i) => (
-          <Combatant key={f.uid} b={f} cls={v.cls[f.uid] ?? ''} size={foeSize} style={{ right: `${6 + i * 30}%`, top: `${4 + i * 4}%` }} pops={v.pops} />
-        ))}
+        {v.foes.map((f, i) => {
+          const eff = attacker && select.showMatchup && !f.fainted ? typeMultiplier(getMove(attacker.moves[0]).type, getSpecies(f.speciesId).types) : null;
+          return <Combatant key={f.uid} b={f} cls={`${v.cls[f.uid] ?? ''} ${select.targetUid === f.uid ? 'target' : ''} ${select.onSelectFoe && !f.fainted ? 'selectable' : ''}`} size={foeSize}
+            style={foeN === 1 ? { right: '6%', top: '4%' } : { right: `${4 + i * 31}%`, top: `${3 + (i % 2) * 6}%` }} pops={v.pops} eff={eff} onClick={select.onSelectFoe && !f.fainted ? () => select.onSelectFoe!(f.uid) : undefined} />;
+        })}
         {v.allies.map((a, i) => (
-          <Combatant key={a.uid} b={a} cls={v.cls[a.uid] ?? ''} size={allySize} mine={!!myOwnerId && a.ownerId === myOwnerId} pending={pendingUids.includes(a.uid)}
-            style={{ left: `${3 + i * (allyN <= 2 ? 40 : 23)}%`, bottom: `${6 + (i % 2) * 5}%` }} pops={v.pops}
-            emotes={emotes.filter(e => e.playerId === a.ownerId)} />
+          <Combatant key={a.uid} b={a} cls={`${v.cls[a.uid] ?? ''} ${select.attackerUid === a.uid ? 'attacker' : ''} ${select.tiredUids?.includes(a.uid) ? 'tired' : ''} ${select.onSelectAlly && !a.fainted ? 'selectable' : ''}`} size={allySize} mine={!!myOwnerId && a.ownerId === myOwnerId} pending={pendingUids.includes(a.uid)}
+            style={{ left: `${3 + i * (allyN <= 2 ? 40 : 30)}%`, bottom: `${6 + (i % 2) * 5}%` }} pops={v.pops}
+            emotes={emotes.filter(e => e.playerId === a.ownerId)} tired={select.tiredUids?.includes(a.uid)} onClick={select.onSelectAlly && !a.fainted ? () => select.onSelectAlly!(a.uid) : undefined} />
         ))}
       </div>
+      {lineFrom && lineTo && <svg className="speedline" style={{ color: select.line === 'blue' ? '#66e0ff' : '#ff5f6d' }}><line x1={lineFrom.x} y1={lineFrom.y} x2={lineTo.x} y2={lineTo.y} stroke="currentColor" /></svg>}
       <canvas ref={api.refs.canvas} className="fxcanvas" />
       <div className={`flash ${v.flash}`} />
       {v.cutin && <CutIn moveId={v.cutin.moveId} speciesId={v.cutin.speciesId} shiny={v.cutin.shiny} />}
@@ -159,17 +178,20 @@ export function BattleStage({ api, bg, myOwnerId, pendingUids = [], emotes = [],
   );
 }
 
-function Combatant({ b, cls, size, style, mine, pending, pops, emotes = [] }: { b: Battler; cls: string; size: number; style: React.CSSProperties; mine?: boolean; pending?: boolean; pops: Pop[]; emotes?: EmoteBubble[] }) {
+function Combatant({ b, cls, size, style, mine, pending, pops, emotes = [], eff, onClick, tired }: { b: Battler; cls: string; size: number; style: React.CSSProperties; mine?: boolean; pending?: boolean; pops: Pop[]; emotes?: EmoteBubble[]; eff?: number | null; onClick?: () => void; tired?: boolean }) {
   const s = getSpecies(b.speciesId);
   return (
-    <div className={`combatant ${b.side} ${cls} ${mine ? 'mine' : ''} ${b.isBoss ? 'boss' : ''}`} data-uid={b.uid} style={{ ...style, width: size }}>
+    <div className={`combatant ${b.side} ${cls} ${mine ? 'mine' : ''} ${b.isBoss ? 'boss' : ''}`} data-uid={b.uid} style={{ ...style, width: size }} onClick={onClick}>
       <div className="art" style={{ width: size, height: size }}>
         <Sprite id={b.speciesId} shiny={b.shiny} size="100%" />
+        {tired && <span className="zz">💤</span>}
+        {eff !== null && eff !== undefined && <span className={`eff-tag ${eff >= 2 ? 'super' : eff === 0 ? 'none' : eff < 1 ? 'weak' : ''}`}>{eff >= 2 ? 'ばつぐん' : eff === 0 ? 'こうかなし' : eff < 1 ? 'いまひとつ' : 'ふつう'}</span>}
         {emotes.map(e => <div key={e.id} className="emote" style={{ left: '50%', top: 0 }}>{e.emote}</div>)}
         {pops.filter(p => p.uid === b.uid).map(p => <div key={p.id} className={`dmg ${p.cls}`} style={{ left: '50%', top: '40%' }}>{p.text}</div>)}
       </div>
       <div className="plate">
         <div className="nm"><span>{b.isBoss && '👑'}{b.name}{b.shiny && '✨'}</span><span>Lv.{b.level}</span></div>
+        {b.side === 'ally' && <div className="own" style={{ color: TYPE_COLOR[getMove(b.moves[0]).type] }}>{getMove(b.moves[0]).ja}</div>}
         {b.ownerId !== 'wild' && <div className="own">{b.ownerName} {pending && <span className="pending-dot" title="えらんでいます" />}</div>}
         <HpBar hp={b.hp} max={b.maxHp} />
         <div className="hpn">{b.side === 'ally' || b.isBoss ? `${b.hp} / ${b.maxHp}` : `${Math.ceil((b.hp / b.maxHp) * 100)}%`} <span style={{ color: TYPE_COLOR[s.types[0]] }}>●</span></div>

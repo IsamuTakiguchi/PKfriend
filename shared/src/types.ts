@@ -37,18 +37,22 @@ export interface Move {
 }
 
 /** A Pokémon owned by a player (persisted client side). */
+/** Special marks printed on a pick (Frienda: テラスタル / Zワザ / メガシンカ / タッグわざ / ダイマックス). */
+export type SpecialKind = 'tera' | 'z' | 'mega' | 'tag' | 'dyna';
+
 export interface OwnedPokemon {
   uid: string;
   speciesId: number;
   nickname?: string;
   exp: number;
   ivs: BaseStats;
-  moves: string[];
+  moves: string[];       // moves[0] is the pick's わざ used in battle
   shiny: boolean;
+  mark?: SpecialKind;
   caughtAt: number;
   caughtBy: string;      // player id of original trainer
   caughtByName: string;
-  origin: 'wild' | 'raid' | 'trade' | 'starter';
+  origin: 'wild' | 'raid' | 'trade' | 'starter' | 'rental' | 'bonus' | 'exchange';
 }
 
 export interface StatStages { atk: number; def: number; spa: number; spd: number; spe: number; }
@@ -84,6 +88,17 @@ export interface BattleAction {
   battlerUid: string;
   moveId: string;
   targetUid?: string;
+  /** こうげきルーレットの数字 (1..10). Damage is scaled by roulette / 5. Undefined = 1.0x. */
+  roulette?: number;
+  /** せんこうチャンス success etc.: added to the move priority. */
+  initiative?: number;
+  /** Special chance that fired on this attack. */
+  special?: SpecialKind;
+  /** タッグわざ: partner battler whose roulette number is added. */
+  assistUid?: string;
+  assistRoulette?: number;
+  /** サポートポケモンの ついげき (follow-up hit, fraction of the damage dealt). */
+  support?: { speciesId: number; name: string };
 }
 
 export type BattleEvent =
@@ -98,6 +113,9 @@ export type BattleEvent =
   | { kind: 'swap'; outUid: string; battler: Battler }
   | { kind: 'boss_enrage'; bossUid: string }
   | { kind: 'chain'; count: number }
+  | { kind: 'special'; userUid: string; special: SpecialKind }
+  | { kind: 'assist'; userUid: string; partnerUid: string; targetUid: string; amount: number; hpAfter: number }
+  | { kind: 'support'; speciesId: number; name: string; targetUid: string; amount: number; hpAfter: number }
   | { kind: 'battle_end'; winner: 'ally' | 'foe' };
 
 export interface Player { id: string; name: string; avatarSpeciesId: number; }

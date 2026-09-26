@@ -181,3 +181,38 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .evo { animation: evo 2.4s forwards; } @keyframes evo { 0% { filter: brightness(1); } 40% { filter: brightness(0) invert(1); transform: scale(1.1); } 60% { filter: brightness(0) invert(1); transform: scale(.9); } 100% { filter: brightness(1); transform: scale(1); } }
 .spin { animation: spin 1s linear infinite; } @keyframes spin { to { transform: rotate(360deg); } }
 .blink { animation: blink 1s infinite; } @keyframes blink { 50% { opacity: .3; } }
+
+/* ------------------------------------------------ mini games (roulettes) */
+.mg-wrap { position: absolute; inset: 0; z-index: 14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: radial-gradient(ellipse at 50% 40%, rgba(0,0,0,.35), rgba(0,0,0,.75)); animation: fade .2s; touch-action: manipulation; }
+.mg-title { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 2px 0 #000, 0 0 20px rgba(255,195,113,.6); animation: bannerin .3s; }
+.wheel { position: relative; width: 240px; height: 240px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.08), rgba(0,0,0,.4)); border: 3px solid rgba(255,255,255,.25); box-shadow: 0 0 40px rgba(0,0,0,.5), inset 0 0 30px rgba(255,255,255,.1); }
+.wheel .seg { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 20px; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.2); transition: transform .1s; }
+.wheel .seg.red { color: #ff5f6d; text-shadow: 0 0 10px #ff5f6d; font-size: 24px; }
+.wheel .seg.on { background: #fff; color: #111; transform-origin: center; box-shadow: 0 0 24px #fff; scale: 1.25; }
+.wheel .seg.red.on { background: #ff5f6d; color: #fff; box-shadow: 0 0 30px #ff5f6d; }
+.wheel .seg.glow { box-shadow: 0 0 20px #ffd54a; border-color: #ffd54a; animation: pinch .4s infinite alternate; }
+.wheel .hub { position: absolute; left: 50%; top: 50%; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%; background: linear-gradient(135deg, #ff5f6d, #ffc371); display: grid; place-items: center; font-size: 40px; font-weight: 900; color: #fff; text-shadow: 0 2px 0 #000; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
+.gauge { width: 240px; height: 12px; border-radius: 999px; background: rgba(255,255,255,.15); overflow: hidden; border: 1px solid rgba(255,255,255,.2); } .gauge > i { display: block; height: 100%; background: linear-gradient(90deg, #ffc371, #ff5f6d); transition: width .08s; }
+.mg-btn { min-width: 220px; user-select: none; } .mg-btn small { display: block; font-size: 11px; font-weight: 700; }
+.mg-big { font-size: 48px; font-weight: 900; color: #ffd54a; text-shadow: 0 3px 0 #000, 0 0 30px rgba(255,213,74,.6); text-align: center; animation: bannerin .3s; line-height: 1; }
+.mg-big.red { color: #ff5f6d; text-shadow: 0 3px 0 #000, 0 0 40px #ff5f6d; font-size: 64px; }
+.mg-big small { display: block; font-size: 14px; color: #fff; margin-top: 8px; text-shadow: 0 1px 2px #000; }
+.ballicon { display: inline-block; border-radius: 50%; position: relative; box-shadow: 0 2px 6px rgba(0,0,0,.4); vertical-align: middle; }
+.ballicon::after { content: ''; position: absolute; left: 50%; top: 50%; width: 30%; height: 30%; border-radius: 50%; background: #fff; border: 2px solid #111; transform: translate(-50%,-50%); }
+.bar-track { position: relative; width: 260px; height: 26px; border-radius: 999px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); overflow: hidden; }
+.bar-good { position: absolute; top: 0; bottom: 0; background: rgba(76,217,100,.6); } .bar-cursor { position: absolute; top: -4px; bottom: -4px; width: 6px; background: #fff; box-shadow: 0 0 10px #fff; transform: translateX(-3px); }
+
+/* 3v3 stage additions */
+.combatant.target .art::after { content: '▼'; position: absolute; left: 50%; top: -22px; transform: translateX(-50%); color: #ffd54a; font-size: 20px; text-shadow: 0 2px 0 #000; animation: bob .6s infinite alternate; }
+@keyframes bob { to { transform: translateX(-50%) translateY(6px); } }
+.combatant.attacker .art { filter: drop-shadow(0 0 18px #ffc371); }
+.combatant.tired .art { filter: grayscale(.7) brightness(.7); } .combatant .zz { position: absolute; right: -4px; top: -6px; font-size: 18px; animation: bob 1s infinite alternate; text-shadow: 0 1px 2px #000; }
+.combatant.selectable { cursor: pointer; } .combatant.selectable .art:active { transform: scale(.95); }
+.eff-tag { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); font-size: 10px; font-weight: 900; padding: 2px 6px; border-radius: 6px; background: #222; color: #fff; white-space: nowrap; }
+.eff-tag.super { background: #ffc371; color: #3b2a00; } .eff-tag.weak { background: #555; } .eff-tag.none { background: #333; color: #aaa; }
+.speedline { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+.speedline line { stroke-width: 4; stroke-dasharray: 10 8; animation: dash 1s linear infinite; filter: drop-shadow(0 0 6px currentColor); }
+@keyframes dash { to { stroke-dashoffset: -36; } }
+.mark { display: inline-flex; align-items: center; gap: 2px; font-size: 10px; font-weight: 900; padding: 1px 6px; border-radius: 6px; background: linear-gradient(135deg, #a98ff3, #66e0ff); color: #08132a; }
+.grade { color: #ffd54a; letter-spacing: -1px; font-weight: 900; text-shadow: 0 1px 0 #000; }
+.foe-list { position: absolute; top: 8px; right: 8px; display: flex; flex-direction: column; gap: 4px; z-index: 9; }

@@ -104,3 +104,48 @@ describe('progression', () => {
     expect(bossPool().length).toBeGreaterThan(10);
   });
 });
+
+describe('frienda rules', () => {
+  it('roulette number scales damage (10 = 2x of 5)', async () => {
+    const m = await import('../src/index.js');
+    const rng = m.makeRng(11);
+    const a = m.wildBattler(m.getSpecies(6), 40, rng); const d = m.wildBattler(m.getSpecies(1), 30, rng);
+    const lo = m.calcDamage(a, d, 'flamethrower', m.makeRng(2), m.rouletteMultiplier(5)).damage;
+    const hi = m.calcDamage(a, d, 'flamethrower', m.makeRng(2), m.rouletteMultiplier(10)).damage;
+    expect(hi).toBeGreaterThan(lo * 1.8);
+    expect(m.rouletteMultiplier(undefined)).toBe(1);
+  });
+  it('wild team attacks once per round, initiative can override speed, tag adds an assist hit', async () => {
+    const m = await import('../src/index.js');
+    const rng = m.makeRng(5);
+    const allies = [4, 7, 1].map(id => { const b = m.wildBattler(m.getSpecies(id), 20, rng); b.side = 'ally'; b.ownerId = 'me'; return b; });
+    const foes = [19, 16, 10].map(id => m.wildBattler(m.getSpecies(id), 12, rng));
+    const state = m.newBattle(allies, foes);
+    const wa = m.wildActions(state, rng, foes[1].uid);
+    expect(wa.length).toBe(1); expect(wa[0].battlerUid).toBe(foes[1].uid);
+    const slow = allies[2]; slow.stats.spe = 1; const fast = foes[0]; fast.stats.spe = 200;
+    const ev = m.resolveRound(state, [{ battlerUid: slow.uid, moveId: slow.moves[0], targetUid: fast.uid, roulette: 8, initiative: 5, special: 'tag', assistUid: allies[0].uid, assistRoulette: 6 }, { battlerUid: fast.uid, moveId: fast.moves[0], targetUid: slow.uid, roulette: 4 }], rng);
+    const order = ev.filter(e => e.kind === 'move_used').map(e => (e as { userUid: string }).userUid);
+    expect(order[0]).toBe(slow.uid);
+    expect(ev.some(e => e.kind === 'special')).toBe(true);
+    expect(ev.some(e => e.kind === 'assist') || fast.fainted).toBe(true);
+  });
+  it('ball roulette: master ball always catches, better ball wins', async () => {
+    const m = await import('../src/index.js');
+    const rng = m.makeRng(9);
+    const t = m.wildBattler(m.getSpecies(150), 50, rng);
+    expect(m.rollCatchBall(t, 'master', rng).success).toBe(true);
+    const t2 = m.wildBattler(m.getSpecies(16), 10, rng); t2.hp = Math.floor(t2.maxHp / 2);
+    expect(m.catchChanceBall(t2, 'hyper')).toBeGreaterThan(m.catchChanceBall(t2, 'monster'));
+    expect(m.bestBall(['monster', 'hyper', 'super'])).toBe('hyper');
+  });
+  it('picks have grades, marks and a main move; trainers and exchange offers are generated', async () => {
+    const m = await import('../src/index.js');
+    expect(m.gradeOf(150)).toBe(5); expect(m.gradeOf(19)).toBe(2);
+    const rng = m.makeRng(1); let marks = 0;
+    for (let i = 0; i < 50; i++) { const p = m.createOwned({ speciesId: 25, level: 10, rng, ownerId: 'a', ownerName: 'A', origin: 'wild' }); if (p.mark) marks++; expect(m.mainMove(p)).toBe(p.moves[0]); }
+    expect(marks).toBeGreaterThan(3);
+    const tr = m.makeTrainer(m.AREAS[0], 10, rng); expect(tr.speciesIds.length).toBe(3);
+    expect(m.gradeOf(m.exchangeOffer(19, 10, rng))).toBeGreaterThanOrEqual(3);
+  });
+});

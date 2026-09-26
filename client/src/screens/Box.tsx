@@ -55,8 +55,8 @@ function Detail({ p, onClose }: { p: OwnedPokemon; onClose: () => void }) {
       <div className="grid3" style={{ marginTop: 12 }}>
         {(['hp', 'atk', 'def', 'spa', 'spd', 'spe'] as const).map(k => <div key={k} className="card center" style={{ padding: 8 }}><div className="small muted">{{ hp: 'HP', atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ' }[k]}</div><div style={{ fontWeight: 900 }}>{st[k]}</div></div>)}
       </div>
-      <h3 style={{ marginTop: 14 }}>わざ</h3>
-      <div className="moves">{p.moves.map(id => { const m = getMove(id); return <div key={id} className="movebtn" style={{ '--c': TYPE_COLOR[m.type] } as React.CSSProperties}><div className="mn">{m.ja}</div><div className="mi"><span>{TYPE_JA[m.type]}</span><span>いりょく {m.power || '—'}</span><span>めいちゅう {m.accuracy}</span></div></div>; })}</div>
+      <h3 style={{ marginTop: 14 }}>わざ <span className="small muted">（バトルで つかうのは ★ピックのわざ）</span></h3>
+      <div className="moves">{p.moves.map((id, i) => { const m = getMove(id); return <div key={id} className="movebtn" style={{ '--c': TYPE_COLOR[m.type], outline: i === 0 ? '2px solid var(--accent2)' : undefined } as React.CSSProperties}><div className="mn">{i === 0 && '★ '}{m.ja}</div><div className="mi"><span>{TYPE_JA[m.type]}</span><span>いりょく {m.power || '—'}</span><span>めいちゅう {m.accuracy}</span></div></div>; })}</div>
       <div className="stack" style={{ marginTop: 14 }}>
         <div className="row"><input className="input" placeholder="ニックネーム" value={nick} maxLength={10} onChange={ev => setNick(ev.target.value)} /><button className="btn sm" onClick={() => { update(p.uid, { nickname: nick.trim() || undefined }); toast('ニックネームを へんこうした'); }}>けってい</button></div>
         <div className="grid2">

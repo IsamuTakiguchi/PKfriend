@@ -1,4 +1,4 @@
-import type { Battler, BattleAction, BattleEvent, BattleState, OwnedPokemon, StatStages, Species } from './types.js';
+import type { Battler, BattleAction, BattleEvent, BattleState, OwnedPokemon, StatStages, Species, SpecialKind } from './types.js';
 import { getMove } from './moves.js';
 import { movesFor } from './moves.js';
 import { calcStats, getSpecies, levelFromExp, displayName } from './species.js';
@@ -29,7 +29,7 @@ export function wildBattler(species: Species, level: number, rng: Rng, opts: { b
 
 export interface DamageResult { damage: number; effectiveness: number; crit: boolean; stab: boolean; }
 
-export function calcDamage(attacker: Battler, defender: Battler, moveId: string, rng: Rng): DamageResult {
+export function calcDamage(attacker: Battler, defender: Battler, moveId: string, rng: Rng, multiplier = 1): DamageResult {
   const move = getMove(moveId);
   const atkS = getSpecies(attacker.speciesId), defS = getSpecies(defender.speciesId);
   const effectiveness = typeMultiplier(move.type, defS.types);
@@ -47,6 +47,7 @@ export function calcDamage(attacker: Battler, defender: Battler, moveId: string,
   dmg = Math.floor(dmg * effectiveness);
   // bosses hit a bit softer so a raid party survives a few rounds
   if (attacker.isBoss) dmg = Math.floor(dmg * 0.6);
+  dmg = Math.floor(dmg * multiplier);
   return { damage: Math.max(1, dmg), effectiveness, crit, stab };
 }
 
@@ -60,7 +61,11 @@ function applyStage(target: Battler, stat: keyof StatStages, delta: number, even
   if (target.stages[stat] !== before) events.push({ kind: 'stat_change', targetUid: target.uid, stat, delta });
 }
 
-function useMove(state: BattleState, user: Battler, moveId: string, target: Battler, rng: Rng, events: BattleEvent[], flinched: Set<string>) {
+/** Roulette number -> damage multiplier (5 = 1.0x, 10 = 2.0x). */
+export const rouletteMultiplier = (n: number | undefined) => (n === undefined ? 1 : Math.max(0.2, n / 5));
+export const SPECIAL_MULT: Record<SpecialKind, number> = { tera: 1.5, z: 2.0, mega: 1.5, tag: 1.0, dyna: 1.5 };
+
+function useMove(state: BattleState, user: Battler, moveId: string, target: Battler, rng: Rng, events: BattleEvent[], flinched: Set<string>, action: Partial<BattleAction> = {}) {
   if (user.fainted || flinched.has(user.uid)) return;
   if (target.fainted) {
     const pool = alive(user.side === 'ally' ? state.foes : state.allies);
@@ -83,10 +88,22 @@ function useMove(state: BattleState, user: Battler, moveId: string, target: Batt
     return;
   }
 
-  const r = calcDamage(user, target, moveId, rng);
+  let mult = rouletteMultiplier(action.roulette);
+  if (action.special) { events.push({ kind: 'special', userUid: user.uid, special: action.special }); mult *= SPECIAL_MULT[action.special]; if (action.special === 'mega') { applyStage(user, 'atk', 1, events); applyStage(user, 'spa', 1, events); } }
+  const partner = action.assistUid ? find(state, action.assistUid) : undefined;
+  if (action.special === 'tag' && partner && !partner.fainted) mult += rouletteMultiplier(action.assistRoulette ?? 5) * 0.8;
+  const r = calcDamage(user, target, moveId, rng, mult);
   const dmg = Math.min(target.hp, r.damage);
   target.hp -= dmg;
   events.push({ kind: 'damage', targetUid: target.uid, amount: dmg, hpAfter: target.hp, effectiveness: r.effectiveness, crit: r.crit, stab: r.stab });
+  if (action.special === 'tag' && partner && !partner.fainted && target.hp > 0) {
+    const pr = calcDamage(partner, target, partner.moves[0], rng, 0.6); const pd = Math.min(target.hp, pr.damage); target.hp -= pd;
+    events.push({ kind: 'assist', userUid: user.uid, partnerUid: partner.uid, targetUid: target.uid, amount: pd, hpAfter: target.hp });
+  }
+  if (action.support && target.hp > 0 && dmg > 0) {
+    const sd = Math.min(target.hp, Math.max(1, Math.floor(dmg * 0.35))); target.hp -= sd;
+    events.push({ kind: 'support', speciesId: action.support.speciesId, name: action.support.name, targetUid: target.uid, amount: sd, hpAfter: target.hp });
+  }
   if (r.damage > 0 && move.effect && rng() * 100 < (move.effectChance ?? 0)) {
     switch (move.effect) {
       case 'drain': { const amt = Math.min(user.maxHp - user.hp, Math.floor(dmg / 2)); if (amt > 0) { user.hp += amt; events.push({ kind: 'heal', targetUid: user.uid, amount: amt, hpAfter: user.hp }); } break; }
@@ -115,6 +132,15 @@ export function bossActions(state: BattleState, rng: Rng): BattleAction[] {
   return acts;
 }
 
+/** Wild team (3 vs 3): one wild pokémon attacks per round, with a modest random roulette number. */
+export function wildActions(state: BattleState, rng: Rng, preferUid?: string): BattleAction[] {
+  const wilds = alive(state.foes).filter(f => !f.isBoss); const targets = alive(state.allies);
+  if (!wilds.length || !targets.length) return [];
+  const w = wilds.find(x => x.uid === preferUid) ?? wilds[Math.floor(rng() * wilds.length)];
+  const t = targets[Math.floor(rng() * targets.length)];
+  return [{ battlerUid: w.uid, moveId: aiChoose(w, t, rng), targetUid: t.uid, roulette: 2 + Math.floor(rng() * 5) }];
+}
+
 /** Resolve one full round. Mutates state, returns ordered events for the client to animate. */
 export function resolveRound(state: BattleState, actions: BattleAction[], rng: Rng): BattleEvent[] {
   const events: BattleEvent[] = [];
@@ -126,7 +152,7 @@ export function resolveRound(state: BattleState, actions: BattleAction[], rng: R
     .map(a => ({ a, b: find(state, a.battlerUid)!, m: getMove(a.moveId) }))
     .filter(x => x.b && !x.b.fainted)
     .sort((x, y) => {
-      const p = (y.m.priority ?? 0) - (x.m.priority ?? 0);
+      const p = ((y.m.priority ?? 0) + (y.a.initiative ?? 0)) - ((x.m.priority ?? 0) + (x.a.initiative ?? 0));
       if (p !== 0) return p;
       return y.b.stats.spe * stageMul(y.b.stages.spe) - x.b.stats.spe * stageMul(x.b.stages.spe) || rng() - 0.5;
     });
@@ -139,7 +165,7 @@ export function resolveRound(state: BattleState, actions: BattleAction[], rng: R
     if (!target || (target.side === b.side && getMove(a.moveId).category !== 'status')) target = alive(enemies)[0];
     if (!target) break;
     const before = events.length;
-    useMove(state, b, a.moveId, target, rng, events, flinched);
+    useMove(state, b, a.moveId, target, rng, events, flinched, a);
     const hit = events.slice(before).find(e => e.kind === 'damage') as Extract<BattleEvent, { kind: 'damage' }> | undefined;
     if (b.side === 'ally' && hit && hit.effectiveness >= 2) { chain++; if (chain >= 2) events.push({ kind: 'chain', count: chain }); } else if (b.side === 'ally') chain = 0;
 

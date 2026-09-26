@@ -60,8 +60,8 @@ wss.on('connection', ws => {
       case 'leave_room': { if (room) { room.remove(client); deleteIfEmpty(room); } send(ws, { t: 'left' }); break; }
       case 'battle_select': { if (room instanceof BattleRoom) room.select(client, msg.pokemon); break; }
       case 'battle_start': { if (room instanceof BattleRoom) room.start(client); break; }
-      case 'battle_action': { if (room instanceof BattleRoom) room.action(client, msg.moveId); break; }
-      case 'catch_attempt': { if (room instanceof BattleRoom) room.catchAttempt(client, msg.timing); break; }
+      case 'battle_action': { if (room instanceof BattleRoom) room.action(client, msg.moveId, msg.roulette, msg.special); break; }
+      case 'catch_attempt': { if (room instanceof BattleRoom) room.catchAttempt(client, msg.ball); break; }
       case 'emote': { if (room) room.broadcast({ t: 'emote', playerId: client.player.id, playerName: client.player.name, emote: String(msg.emote).slice(0, 8) }); break; }
       case 'trade_offer': { if (room instanceof TradeRoom) room.offer(client, msg.pokemon); break; }
       case 'trade_confirm': { if (room instanceof TradeRoom) room.confirm(client, msg.confirmed); break; }
