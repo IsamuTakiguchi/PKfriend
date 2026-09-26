@@ -7,7 +7,7 @@ name: Deploy
 #   4. Render         : Secrets に RENDER_DEPLOY_HOOK_URL を入れると Render 側の再デプロイも起動
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/pokemon-blender-app-zfkrfp']  # TEMP: verify the pipeline from the feature branch
   workflow_dispatch:
 
 concurrency:
