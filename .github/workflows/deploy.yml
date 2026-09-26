@@ -16,8 +16,6 @@ concurrency:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
   packages: write
 
 env:
@@ -71,12 +69,13 @@ jobs:
       - run: npm run build
 
   # ---------------------------------------------------------------- 2. GitHub Pages (PWA クライアント)
+  # 成果物を gh-pages ブランチに push する方式。公開リポジトリなら Pages が自動で有効になり
+  # https://<owner>.github.io/<repo>/ で配信される（Settings で有効化する操作は不要）。
   pages:
     needs: [setup, test]
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -91,14 +90,23 @@ jobs:
         run: |
           npm run build -w client
           cp client/dist/index.html client/dist/404.html   # SPA fallback
-      - uses: actions/configure-pages@v5
+      - name: Publish to gh-pages branch
+        uses: peaceiris/actions-gh-pages@v4
         with:
-          enablement: true
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: client/dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: client/dist
+          force_orphan: true
+          commit_message: "deploy: ${{ github.sha }}"
+      - name: Wait for the site
+        run: |
+          owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          url="https://${owner}.github.io${{ needs.setup.outputs.base }}"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$url")
+            if [ "$code" = "200" ]; then echo "::notice::PWA is live at $url"; exit 0; fi
+            sleep 20
+          done
+          echo "::warning::$url is not reachable yet (Pages may still be building, or enable it once in Settings -> Pages -> Branch: gh-pages)."
 
   # ---------------------------------------------------------------- 3. コンテナイメージ (GHCR)
   image:
