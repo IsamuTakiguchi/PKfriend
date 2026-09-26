@@ -1,0 +1,12 @@
+# Render Blueprint: "New +" -> "Blueprint" でこのリポジトリを選ぶと 1 クリックでデプロイできます。
+services:
+  - type: web
+    name: pkfriend
+    runtime: docker
+    plan: free
+    region: singapore
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: 8787

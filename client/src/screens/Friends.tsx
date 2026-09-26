@@ -19,6 +19,7 @@ export function Friends() {
     <div className="screen stack">
       <div className="row between"><h1>フレンド</h1><span className="row small muted"><span className={`dot ${online ? 'on' : ''}`} />{online ? 'オンライン' : 'せつぞく中…'}</span></div>
       <div className="card hi row"><Sprite id={player.avatarSpeciesId} size={56} /><div><div className="small muted">あなた</div><b>{player.name}</b></div></div>
+      {status === 'offline' && <div className="card small" style={{ borderColor: 'var(--warn)' }}>⚠️ サーバーに つながっていません。こうかんと みんなでバトルには サーバーが ひつようです（README の「デプロイ」を かくにん）。たんけんは オフラインでも あそべます。</div>}
 
       <div className="card stack">
         <h3>へやに さんかする</h3>

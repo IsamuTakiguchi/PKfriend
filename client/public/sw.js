@@ -1,6 +1,7 @@
 // Minimal app-shell service worker: network-first for navigation, cache-first for assets & sprites.
 const SHELL = 'pkfriend-shell-v1';
 const IMAGES = 'pkfriend-img-v1';
+const ROOT = self.registration.scope; // works at '/' and at a sub path such as '/PKfriend/'
 self.addEventListener('install', e => { self.skipWaiting(); });
 self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
 self.addEventListener('fetch', e => {
@@ -9,7 +10,7 @@ self.addEventListener('fetch', e => {
   const url = new URL(req.url);
   if (url.pathname.startsWith('/ws') || url.pathname.startsWith('/api')) return;
   if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).then(r => { const c = r.clone(); caches.open(SHELL).then(cache => cache.put('/', c)); return r; }).catch(() => caches.match('/')));
+    e.respondWith(fetch(req).then(r => { const c = r.clone(); caches.open(SHELL).then(cache => cache.put(ROOT, c)); return r; }).catch(() => caches.match(ROOT)));
     return;
   }
   if (url.hostname === 'raw.githubusercontent.com' || url.hostname === 'fonts.gstatic.com') {

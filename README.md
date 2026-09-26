@@ -46,7 +46,31 @@ docker build -t pkfriend .
 docker run -p 8787:8787 pkfriend
 ```
 
-Render / Fly.io / Railway などにデプロイして HTTPS で公開すると、iOS / Android の「ホーム画面に追加」でアプリとしてインストールできます（PWA）。ストア配布したい場合は Capacitor で `client/dist` をラップできます。
+## 自動デプロイ（GitHub Actions）
+
+`main` に push すると `.github/workflows/deploy.yml` が **テスト → ビルド → デプロイ** を全自動で行います。
+
+| 先 | 内容 | 必要な設定 |
+| --- | --- | --- |
+| **GitHub Pages** | PWA クライアントを `https://<owner>.github.io/<repo>/` に配信。たんけん・ボックス・ずかんはこれだけで遊べる | なし（ワークフローが Pages を自動で有効化） |
+| **GHCR** | サーバー入りコンテナ `ghcr.io/<owner>/pkfriend:latest` を公開。VPS や他の PaaS から pull できる | なし |
+| **Fly.io** | サーバー本体（WebSocket）＋クライアントを `https://<repo>-<owner>.fly.dev` で公開。こうかん・みんなでバトルはこれで動く | Secrets に `FLY_API_TOKEN` |
+| **Render** | Render 側の再デプロイを起動 | Secrets に `RENDER_DEPLOY_HOOK_URL`（`render.yaml` で Blueprint 作成後に取得） |
+
+Pages 版のクライアントは、ビルド時に Fly のアドレス（`wss://<repo>-<owner>.fly.dev/ws`）をサーバーとして埋め込みます。Fly を使わず別のサーバーにつなぐ場合は、リポジトリの **Variables** に `PUBLIC_WS_URL`（例: `wss://example.com/ws`）を設定してください。Fly のアプリ名を変えたいときは Variables の `FLY_APP_NAME`、組織を変えるときは `FLY_ORG` を設定します。
+
+### Fly.io を有効にする手順（1回だけ）
+
+1. https://fly.io でアカウントを作る（無料枠は終了しており、この構成だと月数ドル程度の従量課金。アイドル時はマシンが自動停止）
+2. `flyctl tokens create deploy` またはダッシュボードの **Tokens** でトークンを発行
+3. GitHub リポジトリの **Settings → Secrets and variables → Actions → New repository secret** で `FLY_API_TOKEN` に貼り付け
+4. `main` に push（または Actions タブの **Deploy → Run workflow**）。アプリの作成からデプロイ、ヘルスチェックまで自動で行われます
+
+`main` 以外のブランチと PR では `ci.yml` が型チェック・テスト・ビルドだけを実行します。
+
+### 手動デプロイ
+
+Docker イメージはそのまま Render / Railway / Cloud Run / VPS で動きます。Render は `render.yaml` を Blueprint として読み込むだけで作成できます。ストア配布したい場合は Capacitor で `client/dist` をラップできます。
 
 ## テスト・型チェック
 
