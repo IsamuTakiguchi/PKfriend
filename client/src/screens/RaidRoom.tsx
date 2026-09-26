@@ -8,6 +8,7 @@ import { Sprite, Modal, PickCard, PokeCard } from '../components/ui';
 import { BoxPicker } from '../components/BoxPicker';
 import { sfx } from '../audio';
 import { toast } from '../toast';
+import { useBgm } from '../music';
 
 const EMOTES = ['👍', '🔥', '😱', '💪', '🙏', '🎉'];
 const BG = 'linear-gradient(180deg,#1a0b2e 0%,#4a1942 50%,#c31432 100%)';
@@ -26,6 +27,7 @@ export function RaidRoom() {
   const [leaveAsk, setLeaveAsk] = useState(false);
   const started = useRef(false); const expApplied = useRef(false); const usedUids = useRef(new Set<string>());
   const catchWaiter = useRef<((r: { success: boolean; shakes: number }) => void) | null>(null);
+  useBgm(room.phase === 'lobby' ? 'explore' : room.phase === 'battle' ? 'boss' : room.phase === 'catch' ? 'catch' : 'result');
   const isHost = room.hostId === player.id;
   const myBattler = room.state?.allies.find(a => a.ownerId === player.id);
   const myPending = !!myBattler && room.pendingUids.includes(myBattler.uid);

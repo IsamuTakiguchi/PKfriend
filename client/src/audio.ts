@@ -2,11 +2,15 @@
 import { useStore } from './store';
 
 let ctx: AudioContext | null = null;
-function ac(): AudioContext | null {
-  if (!useStore.getState().sound) return null;
+/** Shared AudioContext for SFX and BGM (created lazily, resumed on user gestures). */
+export function getAudioContext(): AudioContext | null {
   try { ctx ??= new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)(); if (ctx.state === 'suspended') void ctx.resume(); return ctx; } catch { return null; }
 }
-export function unlockAudio() { ac(); }
+function ac(): AudioContext | null {
+  if (!useStore.getState().sound) return null;
+  return getAudioContext();
+}
+export function unlockAudio() { getAudioContext(); }
 
 type Wave = OscillatorType;
 function tone(freq: number, dur: number, opts: { type?: Wave; gain?: number; slide?: number; delay?: number; attack?: number } = {}) {

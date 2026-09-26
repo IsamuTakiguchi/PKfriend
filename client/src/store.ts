@@ -14,6 +14,7 @@ interface State {
   friends: Friend[];
   stats: Stats;
   sound: boolean;
+  bgm: boolean;
   setPlayer: (p: Player) => void;
   addPokemon: (p: OwnedPokemon) => void;
   removePokemon: (uid: string) => void;
@@ -24,6 +25,7 @@ interface State {
   addFriend: (f: Omit<Friend, 'lastSeen'>) => void;
   bump: (k: keyof Stats, n?: number) => void;
   toggleSound: () => void;
+  toggleBgm: () => void;
   resetAll: () => void;
 }
 
@@ -31,7 +33,7 @@ const uniq = (a: number[]) => [...new Set(a)].sort((x, y) => x - y);
 export const genId = () => 'u_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 
 export const useStore = create<State>()(persist((set, get) => ({
-  player: null, box: [], party: [], seen: [], caught: [], friends: [], stats: { battles: 0, wins: 0, catches: 0, trades: 0, raids: 0 }, sound: true,
+  player: null, box: [], party: [], seen: [], caught: [], friends: [], stats: { battles: 0, wins: 0, catches: 0, trades: 0, raids: 0 }, sound: true, bgm: true,
   setPlayer: p => set({ player: p }),
   addPokemon: p => set(s => ({ box: [...s.box.filter(x => x.uid !== p.uid), p], caught: uniq([...s.caught, p.speciesId]), seen: uniq([...s.seen, p.speciesId]), party: s.party.length < 3 ? [...s.party, p.uid] : s.party })),
   removePokemon: uid => set(s => ({ box: s.box.filter(x => x.uid !== uid), party: s.party.filter(u => u !== uid) })),
@@ -42,8 +44,9 @@ export const useStore = create<State>()(persist((set, get) => ({
   addFriend: f => set(s => ({ friends: [{ ...f, lastSeen: Date.now() }, ...s.friends.filter(x => x.id !== f.id)].slice(0, 50) })),
   bump: (k, n = 1) => set(s => ({ stats: { ...s.stats, [k]: s.stats[k] + n } })),
   toggleSound: () => set(s => ({ sound: !s.sound })),
+  toggleBgm: () => set(s => ({ bgm: !s.bgm })),
   resetAll: () => { localStorage.removeItem('pkfriend'); location.reload(); },
-}), { name: 'pkfriend', version: 1 }));
+}), { name: 'pkfriend', version: 1, merge: (persisted, current) => ({ ...current, ...(persisted as object), bgm: (persisted as { bgm?: boolean })?.bgm ?? true }) }));
 
 export const useParty = () => { const box = useStore(s => s.box); const party = useStore(s => s.party); return party.map(u => box.find(p => p.uid === u)).filter((p): p is OwnedPokemon => !!p); };
 export const useLead = () => useParty()[0];

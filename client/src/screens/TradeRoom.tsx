@@ -6,11 +6,13 @@ import { Sprite, PokeCard, Modal, PickCard } from '../components/ui';
 import { BoxPicker } from '../components/BoxPicker';
 import { sfx } from '../audio';
 import { toast } from '../toast';
+import { useBgm } from '../music';
 
 export function TradeRoom() {
   const room = useNet(s => s.room) as TradeRoomView; const send = useNet(s => s.send); const leave = useNet(s => s.leave); const done = useNet(s => s.tradeDone); const clearTrade = useNet(s => s.clearTrade);
   const player = useStore(s => s.player)!; const box = useStore(s => s.box);
   const [picker, setPicker] = useState(false); const [stage, setStage] = useState<0 | 1 | 2>(0);
+  useBgm(done ? 'result' : 'home');
   const partner = room.members.find(m => m.player.id !== player.id);
   const myOffer = room.offers[player.id]; const theirOffer = partner ? room.offers[partner.player.id] : undefined;
   const mine = myOffer?.pokemon ? box.find(p => p.uid === myOffer.pokemon!.uid) ?? myOffer.pokemon : null;

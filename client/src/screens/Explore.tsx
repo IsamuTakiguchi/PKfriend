@@ -10,6 +10,7 @@ import { CatchGame } from '../battle/CatchGame';
 import { Sprite, Modal, PickCard, Types } from '../components/ui';
 import { sfx, unlockAudio } from '../audio';
 import { toast } from '../toast';
+import { useBgm } from '../music';
 
 type Phase = 'areas' | 'search' | 'battle' | 'catch' | 'done';
 
@@ -17,6 +18,7 @@ export function Explore() {
   const [area, setArea] = useState<Area | null>(null);
   const [phase, setPhase] = useState<Phase>('areas');
   const party = useParty();
+  useBgm('explore');
   if (!party.length) return <div className="screen"><p className="muted center">パーティに ポケモンが いません</p></div>;
   if (phase === 'areas' || !area) return (
     <div className="screen stack">
@@ -50,6 +52,7 @@ function Encounter({ area, onExit }: { area: Area; onExit: () => void }) {
   const [balls, setBalls] = useState(3);
   const [, force] = useState(0);
   const busy = api.busy;
+  useBgm(caughtP || showEvo ? 'result' : phase === 'catch' ? 'catch' : 'battle');
 
   // build battle
   useEffect(() => {

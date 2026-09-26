@@ -8,6 +8,7 @@ import { Box } from './screens/Box';
 import { Friends } from './screens/Friends';
 import { Toasts } from './components/ui';
 import { unlockAudio } from './audio';
+import { useBgm } from './music';
 
 type Tab = 'home' | 'explore' | 'box' | 'friends';
 
@@ -15,6 +16,7 @@ export default function App() {
   const player = useStore(s => s.player);
   const connect = useNet(s => s.connect); const room = useNet(s => s.room);
   const [tab, setTab] = useState<Tab>('home');
+  useBgm('home');
   useEffect(() => { if (player) connect(); }, [player, connect]);
   useEffect(() => { const h = () => unlockAudio(); window.addEventListener('pointerdown', h, { once: true }); return () => window.removeEventListener('pointerdown', h); }, []);
   useEffect(() => { if (room) setTab('friends'); }, [room]);

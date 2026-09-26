@@ -6,7 +6,7 @@ import { useNet } from '../net';
 
 export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void }) {
   const player = useStore(s => s.player)!; const box = useStore(s => s.box); const caught = useStore(s => s.caught); const seen = useStore(s => s.seen);
-  const stats = useStore(s => s.stats); const sound = useStore(s => s.sound); const toggleSound = useStore(s => s.toggleSound); const setPlayer = useStore(s => s.setPlayer); const resetAll = useStore(s => s.resetAll);
+  const stats = useStore(s => s.stats); const sound = useStore(s => s.sound); const toggleSound = useStore(s => s.toggleSound); const bgm = useStore(s => s.bgm); const toggleBgm = useStore(s => s.toggleBgm); const setPlayer = useStore(s => s.setPlayer); const resetAll = useStore(s => s.resetAll);
   const status = useNet(s => s.status);
   const lead = useLead();
   const [edit, setEdit] = useState(false); const [name, setName] = useState(player.name); const [confirmReset, setConfirmReset] = useState(false);
@@ -31,7 +31,10 @@ export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void 
       <button className="area" style={{ background: 'linear-gradient(135deg,#56ab2f,#a8e063)' }} onClick={() => go('explore')}><h2>🌿 たんけんに いく</h2><span className="small">やせいの ポケモンを みつけて ゲット！</span></button>
       <button className="area" style={{ background: 'linear-gradient(135deg,#cb2d3e,#ef473a)' }} onClick={() => go('friends')}><h2>⚔️ みんなで バトル</h2><span className="small">ともだちと いっしょに ボスに いどもう。とちゅう さんせんも OK！</span></button>
       <button className="area" style={{ background: 'linear-gradient(135deg,#185a9d,#43cea2)' }} onClick={() => go('friends')}><h2>🔁 ともだちと こうかん</h2><span className="small">6けたの コードで つながって ポケモンを こうかん。</span></button>
-      <div className="card row between"><span>🔊 サウンド</span><button className={`btn sm ${sound ? 'gold' : ''}`} onClick={toggleSound}>{sound ? 'ON' : 'OFF'}</button></div>
+      <div className="card stack" style={{ gap: 8 }}>
+        <div className="row between"><span>🎵 BGM</span><button className={`btn sm ${bgm ? 'gold' : ''}`} onClick={toggleBgm}>{bgm ? 'ON' : 'OFF'}</button></div>
+        <div className="row between"><span>🔊 こうかおん</span><button className={`btn sm ${sound ? 'gold' : ''}`} onClick={toggleSound}>{sound ? 'ON' : 'OFF'}</button></div>
+      </div>
       <p className="small muted center">みたポケモン {seen.length}しゅるい ／ ID: {player.id}</p>
       <button className="btn ghost sm" style={{ color: 'var(--muted)' }} onClick={() => setConfirmReset(true)}>データを リセットする</button>
       {edit && (
