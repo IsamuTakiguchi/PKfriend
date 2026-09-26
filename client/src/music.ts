@@ -2,7 +2,7 @@
 // Tracks are written as 16th-note step strings per channel:  "c4 - - . e4"  -> note, hold, hold, rest, note
 // Chords use "+" (c4+e4+g4). Drum channels use "x" for a hit.
 import { useEffect, useRef } from 'react';
-import { getAudioContext } from './audio';
+import { getAudioContext, setDuckHook } from './audio';
 import { useStore } from './store';
 
 export type TrackName = 'home' | 'explore' | 'battle' | 'boss' | 'catch' | 'result';
@@ -128,12 +128,13 @@ class Music {
     if (this.ready) return true;
     const ctx = getAudioContext(); if (!ctx) return false;
     this.ctx = ctx;
-    this.master = ctx.createGain(); this.master.gain.value = 0.7;
+    this.master = ctx.createGain(); this.master.gain.value = 0.55;
+    setDuckHook((ms, depth) => this.duck(ms, depth));
     this.comp = ctx.createDynamicsCompressor(); this.comp.threshold.value = -18; this.comp.ratio.value = 4; this.comp.attack.value = 0.005; this.comp.release.value = 0.2;
     this.delay = ctx.createDelay(1); this.delay.delayTime.value = 0.28; this.delayGain = ctx.createGain(); this.delayGain.gain.value = 0.28;
     this.delay.connect(this.delayGain).connect(this.delay); this.delayGain.connect(this.comp);
     this.master.connect(this.comp).connect(ctx.destination);
-    document.addEventListener('visibilitychange', () => { if (!this.ctx) return; const g = this.master.gain; g.cancelScheduledValues(this.ctx.currentTime); g.linearRampToValueAtTime(document.hidden ? 0 : 0.7, this.ctx.currentTime + 0.3); });
+    document.addEventListener('visibilitychange', () => { if (!this.ctx) return; const g = this.master.gain; g.cancelScheduledValues(this.ctx.currentTime); g.linearRampToValueAtTime(document.hidden ? 0 : 0.55, this.ctx.currentTime + 0.3); });
     this.ready = true;
     return true;
   }
@@ -151,6 +152,16 @@ class Music {
   }
 
   stop() { this.fadeOutCurrent(); this.current = null; }
+
+  /** Test hook: also route the music bus into an extra node (e.g. a recorder). */
+  tapInto(node: AudioNode) { if (this.ensure()) this.comp.connect(node); }
+
+  /** Briefly lower the music so a heavy hit punches through. */
+  duck(ms: number, depth = 0.35) {
+    if (!this.ctx || !this.current || document.hidden) return;
+    const g = this.master.gain; const t = this.ctx.currentTime;
+    g.cancelScheduledValues(t); g.setValueAtTime(g.value, t); g.linearRampToValueAtTime(0.55 * depth, t + 0.03); g.linearRampToValueAtTime(0.55, t + ms / 1000);
+  }
 
   private fadeOutCurrent() {
     if (this.timer) { clearInterval(this.timer); this.timer = null; }

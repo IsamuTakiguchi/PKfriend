@@ -90,8 +90,8 @@ export function useBattleStage(): StageApi {
           const m = getMove(e.moveId); const color = TYPE_COLOR[m.type];
           setLog(`${u.name}の ${m.ja}！`);
           if (m.power >= 90) { sfx.cutin(); setView(x => ({ ...x, cutin: { moveId: m.id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await wait(950); setView(x => ({ ...x, cutin: null })); }
-          if (m.category === 'physical') { setClass(u.uid, u.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(260); }
-          else { setClass(u.uid, 'charge', 700); await wait(300); }
+          if (m.category === 'physical') { sfx.lunge(); setClass(u.uid, u.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(260); }
+          else { sfx.cast(); setClass(u.uid, 'charge', 700); await wait(300); }
           playFx(m.fx, u.uid, (t ?? u).uid, color);
           sfx[FX_SFX[m.fx]]();
           await wait(m.fx === 'beam' || m.fx === 'wave' ? 450 : 300);
@@ -119,7 +119,7 @@ export function useBattleStage(): StageApi {
         case 'join': { setView(x => ({ ...x, allies: [...x.allies.filter(a => a.uid !== e.battler.uid), { ...e.battler }] })); sfx.join(); await banner(`${e.battler.ownerName}が さんせん！`, 'info', 1200 / sp); break; }
         case 'swap': { setView(x => ({ ...x, allies: x.allies.map(a => a.uid === e.outUid ? { ...e.battler } : a) })); sfx.join(); await banner(`いけっ！ ${e.battler.name}！`, 'info', 900 / sp); break; }
         case 'boss_enrage': { const b = nameOf(v, e.bossUid); flash('on dark'); shake(true); sfx.enrage(); setClass(e.bossUid, 'charge', 900); await banner(`${b?.name ?? 'ボス'}は いかりくるった！`, 'big', 1300 / sp); break; }
-        case 'chain': { sfx.crit(); flash('on crit'); await banner(`チェイン ×${e.count}！`, 'gold', 700 / sp); break; }
+        case 'chain': { sfx.chain(); flash('on crit'); await banner(`チェイン ×${e.count}！`, 'gold', 700 / sp); break; }
         case 'battle_end': { if (e.winner === 'ally') { sfx.victory(); await banner('WIN！', 'gold', 1600 / sp); } else { sfx.lose(); await banner('まけてしまった…', '', 1600 / sp); } break; }
       }
     }
