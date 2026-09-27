@@ -118,7 +118,7 @@ export function useBattleStage(): StageApi {
           const u = nameOf(v, e.userUid); const t = nameOf(v, e.targetUid); if (!u) break;
           const m = getMove(e.moveId); const color = TYPE_COLOR[m.type];
           setLog(`${u.name}の ${m.ja}！`);
-          say(lines.move(u.name, m.ja), { priority: true });
+          say(lines.move(getSpecies(u.speciesId).ja, m.ja), { priority: true });
           const cinematic = viewRef.current.solo !== null || opts.cinematic;
           if (!cinematic) {
             await focus(u.uid, `${m.ja}！`); punch(u.uid, 1.1, 500); await wait(520);
@@ -190,12 +190,12 @@ export function useBattleStage(): StageApi {
         }
         case 'heal': { pop(e.targetUid, `+${e.amount}`, 'heal'); sfx.heal(); playFx('heal', e.targetUid, e.targetUid, '#7dff9a'); updateB(e.targetUid, { hp: e.hpAfter }); await wait(700); break; }
         case 'stat_change': { const t = nameOf(v, e.targetUid); if (!t) break; e.delta > 0 ? sfx.buff() : sfx.debuff(); playFx('buff', t.uid, t.uid, e.delta > 0 ? '#ffc371' : '#66e0ff'); await banner(`${t.name}の ${STAT_JA[e.stat]}が ${e.delta > 0 ? 'あがった！' : 'がくっと さがった！'}`, '', 700 / sp); break; }
-        case 'faint': { const t = nameOf(v, e.targetUid); if (!t) break; if (viewRef.current.solo) { setView(x => ({ ...x, solo: t.uid, nameplate: null })); await wait(200); } sfx.faint(); say(lines.faint(t.name), { priority: true }); setClass(t.uid, 'faint'); updateB(t.uid, { hp: 0, fainted: true }); await banner(`${t.name}は たおれた！`, '', 1200 / sp); setClass(t.uid, 'gone'); break; }
-        case 'join': { setView(x => ({ ...x, allies: [...x.allies.filter(a => a.uid !== e.battler.uid), { ...e.battler }] })); sfx.join(); say(lines.joined(e.battler.ownerName), { priority: true }); await banner(`${e.battler.ownerName}が さんせん！`, 'info', 1200 / sp); break; }
+        case 'faint': { const t = nameOf(v, e.targetUid); if (!t) break; if (viewRef.current.solo) { setView(x => ({ ...x, solo: t.uid, nameplate: null })); await wait(200); } sfx.faint(); say(lines.faint(getSpecies(t.speciesId).ja), { priority: true }); setClass(t.uid, 'faint'); updateB(t.uid, { hp: 0, fainted: true }); await banner(`${t.name}は たおれた！`, '', 1200 / sp); setClass(t.uid, 'gone'); break; }
+        case 'join': { setView(x => ({ ...x, allies: [...x.allies.filter(a => a.uid !== e.battler.uid), { ...e.battler }] })); sfx.join(); say(lines.joined(), { priority: true }); await banner(`${e.battler.ownerName}が さんせん！`, 'info', 1200 / sp); break; }
         case 'swap': { setView(x => ({ ...x, allies: x.allies.map(a => a.uid === e.outUid ? { ...e.battler } : a) })); sfx.join(); await banner(`いけっ！ ${e.battler.name}！`, 'info', 900 / sp); break; }
         case 'boss_enrage': { const b = nameOf(v, e.bossUid); flash('on dark'); shake(true); sfx.enrage(); setClass(e.bossUid, 'charge', 900); await banner(`${b?.name ?? 'ボス'}は いかりくるった！`, 'big', 1300 / sp); break; }
         case 'chain': { sfx.chain(); flash('on crit'); await banner(`チェイン ×${e.count}！`, 'gold', 700 / sp); break; }
-        case 'special': { const u = nameOf(v, e.userUid); sfx.cutin(); say(`${u?.name ?? ''}の ${SPECIAL_JA[e.special]}！`, { priority: true }); flash('on crit'); setClass(e.userUid, 'charge', 900); if (u) setView(x => ({ ...x, cutin: { moveId: getMove(u.moves[0]).id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await banner(`${u?.name ?? ''}の ${SPECIAL_JA[e.special]}！`, 'gold', 1000 / sp); setView(x => ({ ...x, cutin: null })); break; }
+        case 'special': { const u = nameOf(v, e.userUid); sfx.cutin(); say(lines.specialDone(SPECIAL_JA[e.special]), { priority: true }); flash('on crit'); setClass(e.userUid, 'charge', 900); if (u) setView(x => ({ ...x, cutin: { moveId: getMove(u.moves[0]).id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await banner(`${u?.name ?? ''}の ${SPECIAL_JA[e.special]}！`, 'gold', 1000 / sp); setView(x => ({ ...x, cutin: null })); break; }
         case 'assist': { const pt = nameOf(v, e.partnerUid); if (pt) { setClass(pt.uid, pt.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(220); playFx(getMove(pt.moves[0]).fx, pt.uid, e.targetUid, TYPE_COLOR[getMove(pt.moves[0]).type]); sfx.hit(); setClass(e.targetUid, 'hit', 500); shake(false); pop(e.targetUid, `${e.amount}`, 'super'); updateB(e.targetUid, { hp: e.hpAfter }); await banner(`${pt.name}の タッグアタック！`, 'info', 800 / sp); } break; }
         case 'support': { sfx.slash(); playFx('impact', e.targetUid, e.targetUid, '#ffc371'); setClass(e.targetUid, 'hit', 500); shake(false); pop(e.targetUid, `${e.amount}`, 'heal'); updateB(e.targetUid, { hp: e.hpAfter }); await banner(`サポートの ${e.name}が ついげき！`, 'info', 800 / sp); break; }
         case 'battle_end': { if (e.winner === 'ally') { sfx.victory(); say(lines.win(), { priority: true }); await banner('WIN！', 'gold', 1600 / sp); } else { sfx.lose(); say(lines.lose(), { priority: true }); await banner('まけてしまった…', '', 1600 / sp); } break; }

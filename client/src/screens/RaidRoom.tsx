@@ -45,7 +45,7 @@ export function RaidRoom() {
       started.current = true;
       api.setBattlers(room.state.allies, room.state.foes);
       if (room.boss) api.solo(room.boss.uid, { enter: true, callout: 'あらわれた！', nameplate: { text: room.boss.name, sub: `ボス Lv.${room.boss.level}` } });
-      sfx.encounter(); if (room.boss) say(lines.bossAppear(room.boss.name), { priority: true }); void api.banner(`ボス ${room.boss?.name}が あらわれた！`, 'big', 1500);
+      sfx.encounter(); if (room.boss) say(lines.bossAppear(getSpecies(room.boss.speciesId).ja), { priority: true }); void api.banner(`ボス ${room.boss?.name}が あらわれた！`, 'big', 1500);
       bump('raids');
       for (const m of room.members) if (m.player.id !== player.id) addFriend({ id: m.player.id, name: m.player.name, avatarSpeciesId: m.player.avatarSpeciesId, via: 'raid' });
     }

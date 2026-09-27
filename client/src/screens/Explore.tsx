@@ -148,8 +148,8 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
 
   /** cinematic intro: each opponent appears alone on screen */
   async function introduce(list: Battler[], sub: string) {
-    say(lines.wildAppear(list.map(w => w.name)), { priority: true });
-    for (const w of list) { sfx.encounter(); api.solo(w.uid, { enter: true, callout: 'あらわれた！', nameplate: { text: `やせいの ${w.name}`, sub: `${sub} Lv.${w.level}` } }); await sleep(1300); }
+    say(lines.wildAppear(), { priority: true });
+    for (const w of list) { sfx.encounter(); api.solo(w.uid, { enter: true, callout: 'あらわれた！', nameplate: { text: `やせいの ${w.name}`, sub: `${sub} Lv.${w.level}` } }); setTimeout(() => say(lines.wildIs(w.name)), 500); await sleep(1300); }
   }
   const aliveAllies = () => state.current?.allies.filter(a => !a.fainted) ?? [];
   const aliveFoes = () => state.current?.foes.filter(f => !f.fainted) ?? [];
@@ -161,7 +161,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     setPhase('resolving');
     // あいては じどうで 前に出てくる
     const nw = foes[Math.floor(rng.current() * foes.length)]; setNextWild(nw); setTargetUid(nw.uid);
-    sfx.lunge(); say(lines.stepForward(nw.name), { priority: true });
+    sfx.lunge(); say(lines.stepForward(getSpecies(nw.speciesId).ja), { priority: true });
     api.solo(nw.uid, { enter: true, callout: `${nw.name}、前へ！`, nameplate: { text: nw.name, sub: isTrainerBattle && trainer ? trainerLabel(trainer) : 'やせいの ポケモン' } });
     await sleep(1500);
     api.setLog(`あいての ${nw.name}が 前に出てきた！ こちらは だれを 出す？`);
@@ -172,7 +172,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
   function chooseAttacker(uid: string, silent = false) {
     setAttackerUid(uid);
     const a = state.current?.allies.find(x => x.uid === uid);
-    if (!silent) { sfx.select(); if (a) say(lines.yourPick(a.name), { priority: true }); }
+    if (!silent) { sfx.select(); if (a) say(lines.yourPick(getSpecies(a.speciesId).ja), { priority: true }); }
     api.solo(uid, { enter: true, callout: silent ? undefined : '前へ！', nameplate: a ? { text: a.name, sub: `${player.name}の ポケモン` } : null });
   }
 
@@ -256,7 +256,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
   }
   async function afterThrow(success: boolean) {
     const t = getTarget!;
-    if (!success) { say(lines.escaped(t.name), { priority: true }); await api.banner(`${t.name}は にげてしまった…`, '', 1000); } else say(lines.caught(t.name), { priority: true });
+    if (!success) { say(lines.escaped(getSpecies(t.speciesId).ja), { priority: true }); await api.banner(`${t.name}は にげてしまった…`, '', 1000); } else say(lines.caught(getSpecies(t.speciesId).ja), { priority: true });
     api.setClass(t.uid, 'gone'); setGetTarget(null); setBall(null); await sleep(300);
     if (success && isLast && rng.current() < 0.35 && justCaughtRef.current) { // こうかんチャンス
       const give = justCaughtRef.current; const offerId = exchangeOffer(give.speciesId, t.level, rng.current); markSeen(offerId);
@@ -304,10 +304,10 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
       if (to > from) { ups.push({ uid, from, to }); const el = evolveLevel(p.speciesId); if (el && to >= el && !evoCandidate) evoCandidate = { p: { ...p, exp }, to: pick(rng.current, evolutionsOf(p.speciesId)) }; }
     }
     if (gain > 0) await api.banner(`${gain} けいけんちを もらった！`, '', 900);
-    for (const u of ups) { const p = useStore.getState().box.find(x => x.uid === u.uid); sfx.levelUp(); if (p) say(lines.levelUp(displayName(p), u.to), { priority: true }); api.setClass(u.uid, 'levelup', 1000); await api.banner(`${p ? displayName(p) : ''}は Lv.${u.to}に あがった！`, 'gold', 1100); }
+    for (const u of ups) { const p = useStore.getState().box.find(x => x.uid === u.uid); sfx.levelUp(); if (p) say(lines.levelUp(getSpecies(p.speciesId).ja), { priority: true }); api.setClass(u.uid, 'levelup', 1000); await api.banner(`${p ? displayName(p) : ''}は Lv.${u.to}に あがった！`, 'gold', 1100); }
     setLevelUps(ups); if (evoCandidate) setEvo(evoCandidate);
   }
-  function doEvolve() { if (!evo) return; setEvolving(true); sfx.evolve(); say('おや？様子が…！', { priority: true }); setTimeout(() => { const s = getSpecies(evo.to); say(lines.evolve(displayName(evo.p), s.ja), { priority: true }); updatePokemon(evo.p.uid, { speciesId: evo.to, moves: movesFor(s.id, s.types, levelFromExp(evo.p.exp)) }); toast(`おめでとう！ ${displayName(evo.p)}は ${s.ja}に しんかした！`, 'ok'); setEvoDone(true); }, 2500); }
+  function doEvolve() { if (!evo) return; setEvolving(true); sfx.evolve(); say(lines.evolveStart(), { priority: true }); setTimeout(() => { const s = getSpecies(evo.to); say(lines.evolve(getSpecies(evo.p.speciesId).ja, s.ja), { priority: true }); updatePokemon(evo.p.uid, { speciesId: evo.to, moves: movesFor(s.id, s.types, levelFromExp(evo.p.exp)) }); toast(`おめでとう！ ${displayName(evo.p)}は ${s.ja}に しんかした！`, 'ok'); setEvoDone(true); }, 2500); }
 
   const canChoose = phase === 'choose' && !busy;
   const eff = attacker && target ? typeMultiplier(getMove(attacker.moves[0]).type, getSpecies(target.speciesId).types) : 1;

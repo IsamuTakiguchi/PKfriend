@@ -66,7 +66,7 @@ export function AttackRoulette({ title = 'こうげきルーレット！', onDon
   const [left, setLeft] = useState(2.6);
   const [result, setResult] = useState<number | null>(null);
 
-  useEffect(() => { if (tired) { say('疲れていてルーレットが回らない！', { priority: true }); setPhase('result'); setResult(2); sfx.debuff(); const t = setTimeout(() => onDone(2), 1300); return () => clearTimeout(t); } else say(lines.roulette(), { priority: true }); }, [tired]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tired) { say(lines.tired(), { priority: true }); setPhase('result'); setResult(2); sfx.debuff(); const t = setTimeout(() => onDone(2), 1300); return () => clearTimeout(t); } else say(lines.roulette(), { priority: true }); }, [tired]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (phase !== 'mash') return;
     const t0 = performance.now();
@@ -126,7 +126,7 @@ export function BallRoulette({ onDone, title = 'ボールルーレット！' }: 
   useEffect(() => { say(lines.ballRoulette(), { priority: true }); }, []);
   const [stopSig, setStopSig] = useState(0); const [stopped, setStopped] = useState<BallKind | null>(null); const [thrown, setThrown] = useState(false);
   const drag = useRef<{ x: number; y: number; t: number; id: number } | null>(null); const [pos, setPos] = useState({ x: 0, y: 0 });
-  async function done(idx: number) { const b = BALL_WHEEL_ITEMS[idx]; setStopped(b); if (b === 'master') sfx.crit(); else if (b === 'hyper') sfx.superEff(); else sfx.select(); say(`${BALL_JA[b]}だ！`, { priority: true }); await sleep(1000); onDone(b); }
+  async function done(idx: number) { const b = BALL_WHEEL_ITEMS[idx]; setStopped(b); if (b === 'master') sfx.crit(); else if (b === 'hyper') sfx.superEff(); else sfx.select(); say(lines.ball(BALL_JA[b]), { priority: true }); await sleep(1000); onDone(b); }
   // drag handling: window-level listeners so the gesture survives leaving the element (and pointer capture failures)
   const stopRef = useRef(stopSig); stopRef.current = stopSig;
   function down(e: React.PointerEvent<HTMLDivElement>) {
@@ -186,7 +186,7 @@ export function MashChance({ need = 14, onDone }: { need?: number; onDone: (won:
 // ------------------------------------------------------------------ 特殊チャンス
 /** メガシンカ / ダイマックス: 上から流れてくる マークを 5回 つづけて タッチ。 */
 export function FallingMarks({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
-  useEffect(() => { say(`${SPECIAL_JA[kind]}チャンス！マークを5回続けてタッチだ！`, { priority: true }); }, [kind]);
+  useEffect(() => { say(lines.specialFalling(SPECIAL_JA[kind]), { priority: true }); }, [kind]);
   const icon = { tera: '💎', z: '🌀', mega: '🧬', tag: '🤝', dyna: '🔺' }[kind];
   const [marks, setMarks] = useState<{ id: number; x: number; born: number; hit?: boolean }[]>([]);
   const [streak, setStreak] = useState(0); const [res, setRes] = useState<boolean | null>(null);
@@ -222,7 +222,7 @@ export function SpecialChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok
   return <AimChance kind={kind} onDone={onDone} />;
 }
 function AimChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
-  useEffect(() => { say(`${SPECIAL_JA[kind]}チャンス！光るマークで止めろ！`, { priority: true }); }, [kind]);
+  useEffect(() => { say(lines.specialAim(SPECIAL_JA[kind]), { priority: true }); }, [kind]);
   const icon = { tera: '💎', z: '🌀', mega: '🧬', tag: '🤝', dyna: '🔺' }[kind];
   const items = Array.from({ length: 10 }, (_, i) => (i === 4 || i === 5 ? icon : '・'));
   const [stopSig, setStopSig] = useState(0); const [res, setRes] = useState<boolean | null>(null);
@@ -238,7 +238,7 @@ function AimChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) 
 
 /** ついげきチャンス (サポートポケモン): タイミングよく タップ！ */
 export function FollowUpChance({ name, onDone }: { name: string; onDone: (ok: boolean) => void }) {
-  useEffect(() => { say(`追撃チャンス！${name}、行け！`, { priority: true }); }, [name]);
+  useEffect(() => { say(lines.followUp(name), { priority: true }); }, [name]);
   const [pos, setPos] = useState(0); const [res, setRes] = useState<boolean | null>(null); const raf = useRef(0); const t0 = useRef(performance.now());
   useEffect(() => { if (res !== null) return; const tick = (t: number) => { setPos(((t - t0.current) / 1400) % 1); raf.current = requestAnimationFrame(tick); }; raf.current = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf.current); }, [res]);
   async function stop() { if (res !== null) return; cancelAnimationFrame(raf.current); const ok = pos > 0.6 && pos < 0.85; setRes(ok); ok ? sfx.superEff() : sfx.miss(); await sleep(700); onDone(ok); }

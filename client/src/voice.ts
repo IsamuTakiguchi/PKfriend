@@ -22,7 +22,7 @@ function refresh() {
   chosen = [...ja].sort((a, b) => score(b) - score(a))[0] ?? null;
 }
 if (typeof speechSynthesis !== 'undefined') { refresh(); speechSynthesis.addEventListener?.('voiceschanged', refresh); }
-export const voiceInfo = () => ({ engine: TTS_URL ? 'voicevox' : 'browser', available: !!TTS_URL || (typeof speechSynthesis !== 'undefined' && voices.some(v => /^ja/i.test(v.lang))), name: TTS_URL ? `VOICEVOX (speaker ${TTS_SPEAKER})` : chosen?.name ?? null, male: !!TTS_URL || (!!chosen && MALE_HINT.test(chosen.name)) });
+export const voiceInfo = () => ({ engine: bank ? 'bank' : TTS_URL ? 'voicevox' : 'browser', available: !!bank || !!TTS_URL || (typeof speechSynthesis !== 'undefined' && voices.some(v => /^ja/i.test(v.lang))), name: bank ? bank.credit : TTS_URL ? `VOICEVOX (speaker ${TTS_SPEAKER})` : chosen?.name ?? null, male: !!bank || !!TTS_URL || (!!chosen && MALE_HINT.test(chosen.name)) });
 
 // ---------------------------------------------------------------- VOICEVOX backend (with a small cache)
 const cache = new Map<string, Promise<ArrayBuffer | null>>();
@@ -47,6 +47,33 @@ async function speakVoicevox(text: string, priority: boolean) {
   music.duck(buf.duration * 1000 + 200, 0.4); current = src; src.onended = () => { if (current === src) current = null; }; src.start(); return true;
 }
 
+// ---------------------------------------------------------------- static voice bank (generated in CI with VOICEVOX, served with the app)
+interface Bank { speaker: number; format: string; credit: string; files: Record<string, string>; }
+let bank: Bank | null = null; let bankLoaded = false;
+const BASE = (env.BASE_URL ?? '/');
+const clipCache = new Map<string, Promise<AudioBuffer | null>>();
+async function loadBank() {
+  if (bankLoaded) return; bankLoaded = true;
+  try { const r = await fetch(`${BASE}voice/manifest.json`, { cache: 'no-cache' }); if (r.ok) bank = await r.json(); } catch { bank = null; }
+}
+void loadBank();
+export const bankInfo = () => bank ? { credit: bank.credit, count: Object.keys(bank.files).length } : null;
+async function clip(text: string): Promise<AudioBuffer | null> {
+  const file = bank?.files[text]; if (!file) return null;
+  if (!clipCache.has(text)) clipCache.set(text, (async () => {
+    try { const { getAudioContext } = await import('./audio'); const ctx = getAudioContext(); if (!ctx) return null; const r = await fetch(`${BASE}voice/${file}`); if (!r.ok) return null; return await ctx.decodeAudioData(await r.arrayBuffer()); } catch { return null; }
+  })());
+  return clipCache.get(text)!;
+}
+async function speakBank(text: string, priority: boolean): Promise<boolean> {
+  await loadBank(); if (!bank?.files[text]) return false;
+  const { getAudioContext } = await import('./audio'); const ctx = getAudioContext(); if (!ctx) return false;
+  const buf = await clip(text); if (!buf) return false;
+  if (current && !priority) return true; if (current) { try { current.stop(); } catch { /* ignore */ } }
+  const src = ctx.createBufferSource(); src.buffer = buf; const g = ctx.createGain(); g.gain.value = 1.25; src.connect(g).connect(ctx.destination);
+  music.duck(buf.duration * 1000 + 200, 0.4); current = src; src.onended = () => { if (current === src) current = null; }; src.start(); return true;
+}
+
 // ---------------------------------------------------------------- public API
 let lastText = ''; let lastAt = 0;
 /** Speak a short line. `priority` lines interrupt whatever is playing; normal lines are dropped while something is speaking. */
@@ -55,8 +82,11 @@ export function say(text: string, opts: { priority?: boolean; rate?: number } = 
   const now = Date.now();
   if (text === lastText && now - lastAt < 4000) return;
   lastText = text; lastAt = now;
-  if (TTS_URL) { void speakVoicevox(text, !!opts.priority).then(ok => { if (!ok) speakBrowser(text, opts); }); return; }
-  speakBrowser(text, opts);
+  void (async () => {
+    if (await speakBank(text, !!opts.priority)) return;
+    if (TTS_URL && await speakVoicevox(text, !!opts.priority)) return;
+    speakBrowser(text, opts);
+  })();
 }
 function speakBrowser(text: string, opts: { priority?: boolean; rate?: number }) {
   if (typeof speechSynthesis === 'undefined') return;
@@ -71,34 +101,4 @@ function speakBrowser(text: string, opts: { priority?: boolean; rate?: number })
   try { speechSynthesis.speak(u); } catch { /* ignore */ }
 }
 export function stopSpeaking() { if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel(); if (current) { try { current.stop(); } catch { /* ignore */ } current = null; } }
-
-/** Commentary lines. Written in natural Japanese (kanji + punctuation) so the synthesizer places accents and pauses correctly. */
-export const lines = {
-  wildAppear: (names: string[]) => `野生の${names.join('、')}が現れた！`,
-  stepForward: (n: string) => `相手の${n}が前に出てきた！`,
-  yourPick: (n: string) => `行け、${n}！`,
-  initiativeChance: () => '先攻チャンス！連打だ！',
-  specialChance: (kind: string) => `${kind}チャンス！`,
-  roulette: () => '攻撃ルーレット、スタート！',
-  cheer: () => 'ボタン連打で応援しよう！',
-  bigNumber: (n: number) => (n >= 10 ? `${n}！最高の数字だ！` : n >= 7 ? `${n}！いい数字だ！` : `${n}。`),
-  move: (u: string, m: string) => `${u}の${m}！`,
-  superEffective: () => '効果は抜群だ！',
-  crit: () => '急所に当たった！',
-  faint: (n: string) => `${n}、ダウン！`,
-  getTime: (last: boolean) => (last ? 'ラストゲットタイム！' : 'ゲットタイム！'),
-  ballRoulette: () => 'ボールルーレット！ボールを投げよう！',
-  caught: (n: string) => `やった！${n}をゲットだ！`,
-  escaped: (n: string) => `ああ、${n}に逃げられた。`,
-  win: () => 'バトル終了！お見事！',
-  lose: () => '全滅。次は頑張ろう！',
-  bossAppear: (n: string) => `ボスの${n}が現れた！みんなで倒そう！`,
-  joined: (p: string) => `${p}が参戦した！`,
-  exchange: () => '交換チャンス！',
-  trainer: (t: string) => `${t}が勝負を仕掛けてきた！`,
-  bonus: () => 'ボーナスゲットタイム！',
-  levelUp: (n: string, lv: number) => `${n}はレベル${lv}に上がった！`,
-  evolve: (a: string, b: string) => `おめでとう！${a}は${b}に進化した！`,
-  nowGet: () => 'お菓子を投げて、ポケモンの反応を確かめよう！',
-  reaction: (rare: boolean) => (rare ? 'レアな反応だ！' : '何かいるぞ！'),
-};
+export { lines } from '@pkfriend/shared';

@@ -8,3 +8,4 @@ export * from './catch.js';
 export * from './areas.js';
 export * from './trainers.js';
 export * from './protocol.js';
+export * from './voice-lines.js';

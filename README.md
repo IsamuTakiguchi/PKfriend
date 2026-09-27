@@ -78,15 +78,14 @@ Pages 版のクライアントは、ビルド時に Fly のアドレス（`wss:/
 
 `main` 以外のブランチと PR では `ci.yml` が型チェック・テスト・ビルドだけを実行します。
 
-### 実況の声をもっと自然にする（任意: VOICEVOX）
+### 実況の声（VOICEVOX を自動で使用）
 
-端末内蔵の音声合成でも実況は流れますが、より自然な男性ボイスにしたい場合は、無料のオープンソース音声合成 **VOICEVOX ENGINE** をサーバーで動かし、その URL をクライアントに渡します。
+デプロイ時に GitHub Actions が **VOICEVOX ENGINE**（無料・オープンソースの音声合成）を起動し、実況の全セリフ（約1,900行）を **玄野武宏** の声で合成して `voice/` に同梱します。実行時にサーバーは不要で、端末を問わず同じ自然な男性ボイスで実況されます。セリフ一覧が変わらない限り、生成結果はキャッシュされ再利用されます（初回のみ 15〜25 分ほど）。
 
-```bash
-docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
-```
-
-リポジトリの Variables に `PUBLIC_TTS_URL`（例: `https://tts.example.com`、HTTPS 必須・CORS 許可が必要）と、任意で `PUBLIC_TTS_SPEAKER`（既定 11 = 玄野武宏、13 = 青山龍星 など男性話者）を設定して push すると、実況が VOICEVOX の声になります。エンジンに接続できないときは自動で端末の音声合成に戻ります。VOICEVOX の音声を使う場合は各キャラクターの利用規約（クレジット表記「VOICEVOX:玄野武宏」など）に従ってください。
+- 話者を変える: Variables に `VOICE_SPEAKER`（VOICEVOX の style id。例: 13 = 青山龍星）
+- 事前生成を止める: Variables に `VOICE_DISABLED=true`（端末の音声合成にフォールバック）
+- リアルタイム合成にしたい場合: 自前の VOICEVOX ENGINE を HTTPS で公開し、Variables に `PUBLIC_TTS_URL` / `PUBLIC_TTS_SPEAKER` を設定
+- VOICEVOX の音声を使う場合は各キャラクターの利用規約に従い、クレジット「VOICEVOX:玄野武宏」を表示してください（アプリのホーム画面に自動表示）
 
 ### 手動デプロイ
 
