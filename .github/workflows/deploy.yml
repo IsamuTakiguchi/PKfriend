@@ -87,18 +87,24 @@ jobs:
       - name: Voice bank cache key
         id: vkey
         env:
-          SPEAKER: ${{ vars.VOICE_SPEAKER || '11' }}
+          SPEAKER_NAME: ${{ vars.VOICE_SPEAKER_NAME || '青山龍星' }}
+          SPEAKER: ${{ vars.VOICE_SPEAKER || '13' }}
         run: |
-          hash=$(npx tsx -e "import { allLines } from './shared/src/index.ts'; import { createHash } from 'node:crypto'; console.log(createHash('sha1').update(allLines().join('\n')).digest('hex').slice(0, 16))")
-          echo "key=voice-v1-${SPEAKER}-${hash}" >> "$GITHUB_OUTPUT"
+          hash=$(npx tsx -e "import { allLines, moodOf } from './shared/src/index.ts'; import { createHash } from 'node:crypto'; console.log(createHash('sha1').update(allLines().map(t => moodOf(t) + ':' + t).join('|')).digest('hex').slice(0, 16))")
+          test -n "$hash"
+          name_id=$(printf '%s' "$SPEAKER_NAME" | sha1sum | cut -c1-8)
+          echo "key=voice-v2-${name_id}-${SPEAKER}-${hash}" >> "$GITHUB_OUTPUT"
+          echo "prefix=voice-v2-${name_id}-${SPEAKER}-" >> "$GITHUB_OUTPUT"
           echo "speaker=$SPEAKER" >> "$GITHUB_OUTPUT"
+          echo "speaker_name=$SPEAKER_NAME" >> "$GITHUB_OUTPUT"
+          echo "::notice::voice bank key voice-v2-${name_id}-${SPEAKER}-${hash} (${SPEAKER_NAME})"
       - name: Restore voice bank
         id: vcache
         uses: actions/cache@v4
         with:
           path: client/public/voice
           key: ${{ steps.vkey.outputs.key }}
-          restore-keys: voice-v2-${{ steps.vkey.outputs.speaker_name }}-${{ steps.vkey.outputs.speaker }}-
+          restore-keys: ${{ steps.vkey.outputs.prefix }}
       - name: Start VOICEVOX engine
         if: steps.vcache.outputs.cache-hit != 'true' && vars.VOICE_DISABLED != 'true'
         run: |
