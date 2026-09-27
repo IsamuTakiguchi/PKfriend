@@ -10,6 +10,7 @@ import { BoxPicker } from '../components/BoxPicker';
 import { sfx } from '../audio';
 import { toast } from '../toast';
 import { useBgm } from '../music';
+import { useUi } from '../ui';
 
 const EMOTES = ['👍', '🔥', '😱', '💪', '🙏', '🎉'];
 const BG = 'linear-gradient(180deg,#1a0b2e 0%,#4a1942 50%,#c31432 100%)';
@@ -29,6 +30,8 @@ export function RaidRoom() {
   const [leaveAsk, setLeaveAsk] = useState(false);
   const [catchStep, setCatchStep] = useState<'idle' | 'roulette' | 'waiting' | 'throw' | 'done'>('idle');
   const started = useRef(false); const expApplied = useRef(false); const usedUids = useRef(new Set<string>()); const usedSpecial = useRef(new Set<string>()); const rewardApplied = useRef(false);
+  const setImmersive = useUi(s => s.setImmersive);
+  useEffect(() => { setImmersive(room.phase !== 'lobby'); return () => setImmersive(false); }, [room.phase, setImmersive]);
   const isHost = room.hostId === player.id;
   const myBattler = room.state?.allies.find(a => a.ownerId === player.id);
   const myPending = !!myBattler && room.pendingUids.includes(myBattler.uid);
@@ -40,6 +43,7 @@ export function RaidRoom() {
     if (room.phase !== 'lobby' && room.state && !started.current) {
       started.current = true;
       api.setBattlers(room.state.allies, room.state.foes);
+      if (room.boss) api.solo(room.boss.uid, { enter: true, callout: 'あらわれた！', nameplate: { text: room.boss.name, sub: `ボス Lv.${room.boss.level}` } });
       sfx.encounter(); void api.banner(`ボス ${room.boss?.name}が あらわれた！`, 'big', 1500);
       bump('raids');
       for (const m of room.members) if (m.player.id !== player.id) addFriend({ id: m.player.id, name: m.player.name, avatarSpeciesId: m.player.avatarSpeciesId, via: 'raid' });
@@ -48,13 +52,13 @@ export function RaidRoom() {
 
   useEffect(() => {
     if (api.busy || !started.current) return;
-    if (joins.length) { const j = joins[0]; clearJoin(j.id); if (j.battler.ownerId === player.id) usedUids.current.add(j.battler.uid); void api.play([{ kind: 'join', battler: j.battler }]); return; }
-    if (rounds.length) { const r = rounds[0]; shiftRound(); setSub('idle'); void api.play(r.events).then(() => { api.setBattlers(r.state.allies, r.state.foes); }); }
-  }, [api, api.busy, rounds, joins, shiftRound, clearJoin, player.id]);
+    if (joins.length) { const j = joins[0]; clearJoin(j.id); if (j.battler.ownerId === player.id) usedUids.current.add(j.battler.uid); api.solo(j.battler.uid, { enter: true, nameplate: { text: j.battler.name, sub: `${j.playerName}が さんせん！` } }); void api.play([{ kind: 'join', battler: j.battler }], { restoreSolo: room.boss?.uid ?? null }); return; }
+    if (rounds.length) { const r = rounds[0]; shiftRound(); setSub('idle'); void api.play(r.events, { cinematic: true, restoreSolo: room.boss?.uid ?? null }).then(() => { api.setBattlers(r.state.allies, r.state.foes); }); }
+  }, [api, api.busy, rounds, joins, shiftRound, clearJoin, player.id, room.boss]);
 
   // catch phase: clear the stage, then once the shared result is in, play the throw
   useEffect(() => {
-    if (room.phase === 'catch' && !api.busy && room.state) { for (const a of room.state.allies) api.setClass(a.uid, 'gone'); if (room.boss) api.setClass(room.boss.uid, 'popout'); }
+    if (room.phase === 'catch' && !api.busy && room.state && room.boss) { api.solo(room.boss.uid, { nameplate: { text: room.boss.name, sub: 'よわっている！' } }); api.setClass(room.boss.uid, 'popout'); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room.phase, api.busy]);
   const myResult = room.catchResults[player.id];
@@ -103,7 +107,7 @@ export function RaidRoom() {
   return (
     <div className="screen full">
       <BattleStage api={api} bg={BG} myOwnerId={player.id} pendingUids={room.pendingUids} emotes={emotes}>
-        <div style={{ position: 'absolute', top: 8, left: 8, right: 8, display: 'flex', justifyContent: 'space-between', zIndex: 9, pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: 70, left: 8, right: 8, display: 'flex', justifyContent: 'space-between', zIndex: 9, pointerEvents: 'none' }}>
           <span className="badge">コード {room.code}</span><span className="badge">{room.members.length}にん さんか</span>
           <button className="btn sm" style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,.5)' }} onClick={() => setLeaveAsk(true)}>でる</button>
         </div>

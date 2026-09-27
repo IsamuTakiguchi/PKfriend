@@ -27,6 +27,9 @@ export function wildBattler(species: Species, level: number, rng: Rng, opts: { b
   };
 }
 
+/** Global damage scale (Frienda-style short battles). */
+export const DAMAGE_SCALE = 1.7;
+
 export interface DamageResult { damage: number; effectiveness: number; crit: boolean; stab: boolean; }
 
 export function calcDamage(attacker: Battler, defender: Battler, moveId: string, rng: Rng, multiplier = 1): DamageResult {
@@ -45,6 +48,8 @@ export function calcDamage(attacker: Battler, defender: Battler, moveId: string,
   if (stab) dmg = Math.floor(dmg * 1.5);
   if (crit) dmg = Math.floor(dmg * 1.5);
   dmg = Math.floor(dmg * effectiveness);
+  // arcade pacing: a wild pokémon should go down in one or two good hits
+  dmg = Math.floor(dmg * DAMAGE_SCALE);
   // bosses hit a bit softer so a raid party survives a few rounds
   if (attacker.isBoss) dmg = Math.floor(dmg * 0.6);
   dmg = Math.floor(dmg * multiplier);

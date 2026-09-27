@@ -236,3 +236,34 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .stage.duel .combatant.front.ally .plate { min-width: 150px; }
 .stage.duel .combatant.front .plate .nm { font-size: 14px; }
 .vs { position: absolute; left: 22%; top: 44%; transform: translate(-50%,-50%); font-size: 44px; font-weight: 900; font-style: italic; color: #fff; -webkit-text-stroke: 2px #111; text-shadow: 0 4px 0 #111, 0 0 30px rgba(255,95,109,.8); animation: bannerin .4s; z-index: 8; pointer-events: none; }
+
+/* ------------------------------------------------ cinematic solo mode */
+.stage.solo-mode .combatant.solo { transition: none; }
+.stage.solo-mode .combatant.solo .plate { min-width: 200px; font-size: 13px; margin-top: 8px; }
+.stage.solo-mode .combatant.solo .plate .nm { font-size: 16px; }
+.stage.solo-mode .hpbar > i { transition: width 1.5s cubic-bezier(.2,.8,.2,1), background .3s; }
+.stage.slowmo .combatant .art, .stage.slowmo .dmg { animation-duration: 1.6s !important; }
+.speedlines { position: absolute; inset: -30%; pointer-events: none; z-index: 4; background: repeating-conic-gradient(from 0deg, rgba(255,255,255,.16) 0deg 2deg, transparent 2deg 9deg); mask-image: radial-gradient(circle at 50% 45%, transparent 28%, #000 60%); -webkit-mask-image: radial-gradient(circle at 50% 45%, transparent 28%, #000 60%); animation: spinlines .5s linear infinite; }
+@keyframes spinlines { to { transform: rotate(9deg); } }
+.nameplate { position: absolute; left: 12px; top: 74px; z-index: 9; padding: 6px 14px; border-radius: 12px; background: rgba(10,12,24,.85); border: 1px solid var(--line); animation: bannerin .3s; pointer-events: none; }
+.nameplate b { font-size: 20px; display: block; } .nameplate small { color: var(--muted); font-size: 11px; }
+.nameplate.foe { left: auto; right: 12px; text-align: right; border-color: rgba(255,95,109,.6); }
+.nameplate.ally { border-color: rgba(102,224,255,.6); }
+.combatant.launch-right .art { animation: launchR .9s cubic-bezier(.6,0,.9,.4) forwards; }
+.combatant.launch-left .art { animation: launchL .9s cubic-bezier(.6,0,.9,.4) forwards; }
+@keyframes launchR { 0% { transform: translate(0,0) scale(1); } 35% { transform: translate(-30px,10px) scale(.94); } 100% { transform: translate(420px,-40px) scale(1.5); opacity: 0; } }
+@keyframes launchL { 0% { transform: translate(0,0) scale(1); } 35% { transform: translate(30px,10px) scale(.94); } 100% { transform: translate(-420px,-40px) scale(1.5); opacity: 0; } }
+.combatant.reel .art { animation: reel 1.4s ease-out; }
+@keyframes reel { 0% { transform: translate(18px,-6px) rotate(6deg); filter: brightness(1.8); } 30% { transform: translate(-10px,4px) rotate(-4deg); } 60% { transform: translate(6px,0) rotate(2deg); } 100% { transform: translate(0,0) rotate(0); } }
+.dmg.countup { font-size: 46px; animation: dmgcine 2.2s forwards; }
+.dmg.super.countup { font-size: 58px; }
+@keyframes dmgcine { 0% { transform: translate(-50%,-50%) scale(.3); opacity: 0; } 12% { transform: translate(-50%,-80%) scale(1.4); opacity: 1; } 30% { transform: translate(-50%,-90%) scale(1.1); } 80% { transform: translate(-50%,-100%) scale(1.1); opacity: 1; } 100% { transform: translate(-50%,-150%) scale(1); opacity: 0; } }
+.hud { position: absolute; left: 8px; right: 8px; display: flex; gap: 6px; z-index: 9; pointer-events: none; }
+.hud-foe { top: 8px; justify-content: flex-end; } .hud-ally { bottom: 8px; justify-content: flex-start; }
+.hud-chip { display: flex; align-items: center; gap: 5px; padding: 3px 7px 3px 3px; border-radius: 12px; background: rgba(10,12,24,.78); border: 1px solid var(--line); min-width: 86px; max-width: 118px; flex: 1; pointer-events: auto; text-align: left; transition: transform .2s, border-color .2s; backdrop-filter: blur(6px); }
+.hud-chip .hud-info { flex: 1; min-width: 0; } .hud-chip .hud-name { font-size: 11px; font-weight: 900; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } .hud-chip .hud-sub { font-size: 9px; color: var(--muted); white-space: nowrap; }
+.hud-chip .hpbar { height: 5px; margin: 2px 0; }
+.hud-chip.front { border-color: var(--accent2); transform: scale(1.06); box-shadow: 0 0 0 2px rgba(255,195,113,.3); }
+.hud-chip.down { opacity: .4; filter: grayscale(1); } .hud-chip.tired .sprite { filter: grayscale(.8) brightness(.8); }
+.hud-chip:disabled { pointer-events: none; }
+.hud-foe .hud-chip.front { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(255,95,109,.3); }

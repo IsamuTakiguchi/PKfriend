@@ -19,6 +19,11 @@ export interface StageView {
   zoomOrigin: string;
   focusUid: string | null;
   callout: { uid: string; text: string } | null;
+  /** cinematic mode: only this combatant is on screen */
+  solo: string | null;
+  slowmo: boolean;
+  speedlines: boolean;
+  nameplate: { text: string; sub?: string } | null;
 }
 const STAT_JA: Record<keyof StatStages, string> = { atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ' };
 const FX_SFX: Record<MoveFx, keyof typeof sfx> = { impact: 'hit', slash: 'slash', beam: 'beam', burst: 'burst', shock: 'shock', wave: 'wave', leaf: 'wind', ice: 'ice', aura: 'psychic', quake: 'quake', wind: 'wind', poison: 'wave', psychic: 'psychic', heal: 'heal', buff: 'buff' };
@@ -28,7 +33,7 @@ let popSeq = 0;
 export interface StageApi {
   view: StageView;
   setBattlers: (allies: Battler[], foes: Battler[]) => void;
-  play: (events: BattleEvent[], opts?: { speed?: number; myOwnerId?: string }) => Promise<void>;
+  play: (events: BattleEvent[], opts?: { speed?: number; cinematic?: boolean; restoreSolo?: string | null }) => Promise<void>;
   setClass: (uid: string, cls: string, ms?: number) => void;
   banner: (text: string, kind?: BannerKind, ms?: number) => Promise<void>;
   flash: (kind?: StageView['flash']) => void;
@@ -41,11 +46,13 @@ export interface StageApi {
   punch: (uid: string, scale?: number, ms?: number) => void;
   /** Spotlight one combatant (others dim). null clears. */
   focus: (uid: string | null, callout?: string, ms?: number) => Promise<void>;
+  /** Cinematic: show only this combatant, big and centered (null = show everyone). */
+  solo: (uid: string | null, opts?: { enter?: boolean; callout?: string; nameplate?: { text: string; sub?: string } | null }) => void;
   busy: boolean;
   refs: { root: RefObject<HTMLDivElement>; canvas: RefObject<HTMLCanvasElement>; engine: RefObject<FxEngine | null> };
 }
 
-const initial: StageView = { allies: [], foes: [], cls: {}, banner: null, cutin: null, shake: '', flash: '', pops: [], log: '', zoom: '', zoomOrigin: '50% 50%', focusUid: null, callout: null };
+const initial: StageView = { allies: [], foes: [], cls: {}, banner: null, cutin: null, shake: '', flash: '', pops: [], log: '', zoom: '', zoomOrigin: '50% 50%', focusUid: null, callout: null, solo: null, slowmo: false, speedlines: false, nameplate: null };
 
 export function useBattleStage(): StageApi {
   const [view, setView] = useState<StageView>(initial);
@@ -84,6 +91,10 @@ export function useBattleStage(): StageApi {
     setView(v => ({ ...v, zoom: `scale(${scale})`, zoomOrigin: `${(p.x / r.clientWidth) * 100}% ${(p.y / r.clientHeight) * 100}%` }));
     setTimeout(() => setView(v => ({ ...v, zoom: '' })), ms);
   }, [posOf]);
+  const solo = useCallback((uid: string | null, opts: { enter?: boolean; callout?: string; nameplate?: { text: string; sub?: string } | null } = {}) => {
+    setView(v => ({ ...v, solo: uid, callout: uid && opts.callout ? { uid, text: opts.callout } : null, nameplate: opts.nameplate === undefined ? (uid ? v.nameplate : null) : opts.nameplate, speedlines: false, slowmo: false }));
+    if (uid && opts.enter) { setClass(uid, 'stepin', 800); if (opts.callout) setTimeout(() => setView(v => (v.callout?.uid === uid ? { ...v, callout: null } : v)), 1400); }
+  }, [setClass]);
   const focus = useCallback(async (uid: string | null, callout?: string, ms = 0) => {
     setView(v => ({ ...v, focusUid: uid, callout: uid && callout ? { uid, text: callout } : null }));
     if (ms) { await sleep(ms); setView(v => (v.focusUid === uid ? { ...v, focusUid: null, callout: null } : v)); }
@@ -94,8 +105,7 @@ export function useBattleStage(): StageApi {
 
   const viewRef = useRef(view); viewRef.current = view;
 
-  const play = useCallback(async (events: BattleEvent[], opts: { speed?: number } = {}) => {
-    // eslint-disable-next-line @typescript-eslint/no-use-before-define
+  const play = useCallback(async (events: BattleEvent[], opts: { speed?: number; cinematic?: boolean; restoreSolo?: string | null } = {}) => {
     const sp = opts.speed ?? 1; const wait = (ms: number) => sleep(ms / sp);
     setBusy(true);
     for (const e of events) {
@@ -106,35 +116,77 @@ export function useBattleStage(): StageApi {
           const u = nameOf(v, e.userUid); const t = nameOf(v, e.targetUid); if (!u) break;
           const m = getMove(e.moveId); const color = TYPE_COLOR[m.type];
           setLog(`${u.name}の ${m.ja}！`);
-          await focus(u.uid, `${m.ja}！`); punch(u.uid, 1.1, 500); await wait(520);
-          if (m.power >= 90) { sfx.cutin(); setView(x => ({ ...x, cutin: { moveId: m.id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await wait(950); setView(x => ({ ...x, cutin: null })); }
-          if (m.category === 'physical') { sfx.lunge(); setClass(u.uid, u.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(260); }
-          else { sfx.cast(); setClass(u.uid, 'charge', 700); await wait(300); }
-          playFx(m.fx, u.uid, (t ?? u).uid, color);
+          const cinematic = viewRef.current.solo !== null || opts.cinematic;
+          if (!cinematic) {
+            await focus(u.uid, `${m.ja}！`); punch(u.uid, 1.1, 500); await wait(520);
+            if (m.power >= 90) { sfx.cutin(); setView(x => ({ ...x, cutin: { moveId: m.id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await wait(950); setView(x => ({ ...x, cutin: null })); }
+            if (m.category === 'physical') { sfx.lunge(); setClass(u.uid, u.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(260); }
+            else { sfx.cast(); setClass(u.uid, 'charge', 700); await wait(300); }
+            playFx(m.fx, u.uid, (t ?? u).uid, color); sfx[FX_SFX[m.fx]]();
+            await wait(m.fx === 'beam' || m.fx === 'wave' ? 450 : 300);
+            void focus(null);
+            break;
+          }
+          // ---- 1. close-up on the attacker: name plate, charge-up aura, speed lines (≈2.6s)
+          setView(x => ({ ...x, solo: u.uid, callout: null, nameplate: { text: u.name, sub: u.ownerId === 'wild' ? 'やせいの ポケモン' : u.ownerName }, speedlines: false }));
+          setClass(u.uid, 'stepin', 700); sfx.lunge();
+          await wait(700);
+          punch(u.uid, 1.08, 2200);
+          setView(x => ({ ...x, speedlines: true, callout: { uid: u.uid, text: `${m.ja}！` } }));
+          sfx.cast(); setClass(u.uid, 'charge', 2000);
+          for (let k = 0; k < 3; k++) { playFx(m.category === 'physical' ? 'buff' : 'aura', u.uid, u.uid, color); await wait(600); }
+          if (u.side === 'ally') sfx.buff(); else sfx.debuff();
+          await wait(300);
+          // ---- 2. cut-in with the move name (≈1.1s)
+          sfx.cutin(); setView(x => ({ ...x, cutin: { moveId: m.id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny }, speedlines: false }));
+          await wait(1050); setView(x => ({ ...x, cutin: null }));
+          // ---- 3. launch: the attacker dashes / fires toward the opponent (≈1.0s)
+          const r = root.current; const W = r?.clientWidth ?? 390, H = r?.clientHeight ?? 600;
+          const toRight = u.side === 'ally';
+          setClass(u.uid, toRight ? 'launch-right' : 'launch-left', 900);
           sfx[FX_SFX[m.fx]]();
-          await wait(m.fx === 'beam' || m.fx === 'wave' ? 450 : 300);
-          void focus(null);
+          engine.current?.play(m.fx, posOf(u.uid), { x: toRight ? W + 60 : -60, y: H * 0.45 }, color);
+          setView(x => ({ ...x, speedlines: true }));
+          await wait(850);
+          // ---- 4. cut to the target: the attack comes in from the side (≈0.7s)
+          if (t && t.uid !== u.uid) {
+            flash('on dark');
+            setView(x => ({ ...x, solo: t.uid, callout: null, nameplate: { text: t.name, sub: t.ownerId === 'wild' ? 'やせいの ポケモン' : t.ownerName } }));
+            await wait(250);
+            engine.current?.play(m.fx, { x: toRight ? -60 : W + 60, y: H * 0.45 }, posOf(t.uid), color);
+            if (m.fx === 'beam' || m.fx === 'shock' || m.fx === 'wave') sfx[FX_SFX[m.fx]]();
+            await wait(450);
+          } else { setView(x => ({ ...x, speedlines: false })); }
           break;
         }
         case 'miss': sfx.miss(); await banner('しかし はずれた！', '', 700 / sp); break;
         case 'damage': {
           const t = nameOf(v, e.targetUid); if (!t) break;
           const big = e.effectiveness >= 2 || e.crit || e.amount >= t.maxHp * 0.3;
-          setClass(t.uid, 'hit', 500); shake(big); punch(t.uid, big ? 1.22 : 1.12, big ? 650 : 450);
+          const cinematic = viewRef.current.solo !== null || opts.cinematic;
+          setClass(t.uid, 'hit', 500); shake(big); punch(t.uid, big ? 1.28 : 1.15, cinematic ? 1400 : 500);
           if (e.crit) { flash('on crit'); sfx.crit(); } else if (e.effectiveness >= 2) { flash('on'); sfx.superEff(); }
           if (big) sfx.hitBig(); else sfx.hit();
-          pop(t.uid, `${e.amount}`, e.effectiveness >= 2 ? 'super' : e.crit ? 'crit' : e.effectiveness < 1 ? 'weak' : '');
-          updateB(t.uid, { hp: e.hpAfter });
-          await wait(450);
+          pop(t.uid, `${e.amount}`, `${e.effectiveness >= 2 ? 'super' : e.crit ? 'crit' : e.effectiveness < 1 ? 'weak' : ''}${cinematic ? ' countup' : ''}`);
+          if (cinematic) {
+            // slow motion on impact, then the HP drains slowly while the number counts up
+            setView(x => ({ ...x, slowmo: true, speedlines: false }));
+            await wait(650);
+            setView(x => ({ ...x, slowmo: false }));
+            updateB(t.uid, { hp: e.hpAfter });
+            setClass(t.uid, 'reel', 1400);
+            await wait(1100);
+          } else { updateB(t.uid, { hp: e.hpAfter }); await wait(450); }
           const txt = effectivenessText(e.effectiveness);
-          if (e.crit) await banner('きゅうしょに あたった！', '', 650 / sp);
-          if (txt) await banner(txt, e.effectiveness >= 2 ? 'gold' : '', 750 / sp);
-          if (!txt && !e.crit) await wait(250);
+          if (e.crit) await banner('きゅうしょに あたった！', '', 700 / sp);
+          if (txt) await banner(txt, e.effectiveness >= 2 ? 'gold' : '', (cinematic ? 1100 : 750) / sp);
+          if (!txt && !e.crit) await wait(cinematic ? 500 : 250);
+          if (cinematic) { setView(x => ({ ...x, nameplate: null })); await wait(400); }
           break;
         }
         case 'heal': { pop(e.targetUid, `+${e.amount}`, 'heal'); sfx.heal(); playFx('heal', e.targetUid, e.targetUid, '#7dff9a'); updateB(e.targetUid, { hp: e.hpAfter }); await wait(700); break; }
         case 'stat_change': { const t = nameOf(v, e.targetUid); if (!t) break; e.delta > 0 ? sfx.buff() : sfx.debuff(); playFx('buff', t.uid, t.uid, e.delta > 0 ? '#ffc371' : '#66e0ff'); await banner(`${t.name}の ${STAT_JA[e.stat]}が ${e.delta > 0 ? 'あがった！' : 'がくっと さがった！'}`, '', 700 / sp); break; }
-        case 'faint': { const t = nameOf(v, e.targetUid); if (!t) break; sfx.faint(); setClass(t.uid, 'faint'); updateB(t.uid, { hp: 0, fainted: true }); await banner(`${t.name}は たおれた！`, '', 1000 / sp); setClass(t.uid, 'gone'); break; }
+        case 'faint': { const t = nameOf(v, e.targetUid); if (!t) break; if (viewRef.current.solo) { setView(x => ({ ...x, solo: t.uid, nameplate: null })); await wait(200); } sfx.faint(); setClass(t.uid, 'faint'); updateB(t.uid, { hp: 0, fainted: true }); await banner(`${t.name}は たおれた！`, '', 1200 / sp); setClass(t.uid, 'gone'); break; }
         case 'join': { setView(x => ({ ...x, allies: [...x.allies.filter(a => a.uid !== e.battler.uid), { ...e.battler }] })); sfx.join(); await banner(`${e.battler.ownerName}が さんせん！`, 'info', 1200 / sp); break; }
         case 'swap': { setView(x => ({ ...x, allies: x.allies.map(a => a.uid === e.outUid ? { ...e.battler } : a) })); sfx.join(); await banner(`いけっ！ ${e.battler.name}！`, 'info', 900 / sp); break; }
         case 'boss_enrage': { const b = nameOf(v, e.bossUid); flash('on dark'); shake(true); sfx.enrage(); setClass(e.bossUid, 'charge', 900); await banner(`${b?.name ?? 'ボス'}は いかりくるった！`, 'big', 1300 / sp); break; }
@@ -145,10 +197,11 @@ export function useBattleStage(): StageApi {
         case 'battle_end': { if (e.winner === 'ally') { sfx.victory(); await banner('WIN！', 'gold', 1600 / sp); } else { sfx.lose(); await banner('まけてしまった…', '', 1600 / sp); } break; }
       }
     }
+    if (opts.restoreSolo !== undefined) setView(x => ({ ...x, solo: opts.restoreSolo ?? null, nameplate: null, speedlines: false, slowmo: false }));
     setBusy(false);
-  }, [banner, flash, playFx, pop, setClass, setLog, shake, focus, punch]);
+  }, [banner, flash, playFx, pop, setClass, setLog, shake, focus, punch, posOf]);
 
-  return useMemo(() => ({ view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, playFx, setLog, punch, focus, busy, refs: { root, canvas, engine } }), [view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, playFx, setLog, punch, focus, busy]);
+  return useMemo(() => ({ view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, playFx, setLog, punch, focus, solo, busy, refs: { root, canvas, engine } }), [view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, playFx, setLog, punch, focus, solo, busy]);
 }
 
 // ------------------------------------------------------------------ presentational stage
@@ -186,6 +239,26 @@ export function BattleStage({ api, bg, myOwnerId, pendingUids = [], emotes = [],
   };
   const foeSz = (f: Battler) => (duel ? (f.uid === duel.foeUid ? 190 : 56) : foeSize);
   const allySz = (a: Battler) => (duel ? (a.uid === duel.allyUid ? 185 : 56) : allySize);
+  if (v.solo) {
+    const b = [...v.allies, ...v.foes].find(x => x.uid === v.solo);
+    return (
+      <div ref={api.refs.root} className={`stage solo-mode ${v.shake} ${v.slowmo ? 'slowmo' : ''}`}>
+        <div className="bg" style={{ background: bg }} />
+        {v.speedlines && <div className="speedlines" />}
+        <div className="zoom" style={{ transform: v.zoom, transformOrigin: v.zoomOrigin }}>
+          {b && <Combatant key={b.uid} b={b} cls={`${v.cls[b.uid] ?? ''} solo`} size={Math.min(300, (api.refs.root.current?.clientWidth ?? 390) * 0.72)} style={{ left: '50%', top: '44%', transform: 'translate(-50%,-50%)' }} pops={v.pops} mine={!!myOwnerId && b.ownerId === myOwnerId} tired={select.tiredUids?.includes(b.uid)} callout={v.callout?.uid === b.uid ? v.callout.text : undefined} emotes={emotes.filter(e => e.playerId === b.ownerId)} />}
+        </div>
+        {v.nameplate && <div className={`nameplate ${b?.side ?? ''}`}><b>{v.nameplate.text}</b>{v.nameplate.sub && <small>{v.nameplate.sub}</small>}</div>}
+        <TeamHud side="foe" list={v.foes} front={select.targetUid ?? null} tired={[]} />
+        <TeamHud side="ally" list={v.allies} front={select.attackerUid ?? null} tired={select.tiredUids ?? []} onSelect={select.onSelectAlly} pending={pendingUids} />
+        <canvas ref={api.refs.canvas} className="fxcanvas" />
+        <div className={`flash ${v.flash}`} />
+        {v.cutin && <CutIn moveId={v.cutin.moveId} speciesId={v.cutin.speciesId} shiny={v.cutin.shiny} />}
+        {v.banner && <div className={`banner ${v.banner.kind}`}><span>{v.banner.text}</span></div>}
+        {children}
+      </div>
+    );
+  }
   return (
     <div ref={api.refs.root} className={`stage ${v.shake} ${v.focusUid ? 'focusing' : ''} ${duel ? 'duel' : ''}`}>
       <div className="bg" style={{ background: bg }} />
@@ -230,7 +303,7 @@ function Combatant({ b, cls, size, style, mine, pending, pops, emotes = [], eff,
         {tired && <span className="zz">💤</span>}
         {eff !== null && eff !== undefined && <span className={`eff-tag ${eff >= 2 ? 'super' : eff === 0 ? 'none' : eff < 1 ? 'weak' : ''}`}>{eff >= 2 ? 'ばつぐん' : eff === 0 ? 'こうかなし' : eff < 1 ? 'いまひとつ' : 'ふつう'}</span>}
         {emotes.map(e => <div key={e.id} className="emote" style={{ left: '50%', top: 0 }}>{e.emote}</div>)}
-        {pops.filter(p => p.uid === b.uid).map(p => <div key={p.id} className={`dmg ${p.cls}`} style={{ left: '50%', top: '40%' }}>{p.text}</div>)}
+        {pops.filter(p => p.uid === b.uid).map(p => <div key={p.id} className={`dmg ${p.cls}`} style={{ left: '50%', top: '40%' }}>{p.cls.includes('countup') ? <CountUp to={parseInt(p.text) || 0} /> : p.text}</div>)}
       </div>
       <div className="plate">
         <div className="nm"><span>{b.isBoss && '👑'}{b.name}{b.shiny && '✨'}</span><span>Lv.{b.level}</span></div>
@@ -239,6 +312,27 @@ function Combatant({ b, cls, size, style, mine, pending, pops, emotes = [], eff,
         <HpBar hp={b.hp} max={b.maxHp} />
         <div className="hpn">{b.side === 'ally' || b.isBoss ? `${b.hp} / ${b.maxHp}` : `${Math.ceil((b.hp / b.maxHp) * 100)}%`} <span style={{ color: TYPE_COLOR[s.types[0]] }}>●</span></div>
       </div>
+    </div>
+  );
+}
+
+function CountUp({ to, ms = 900 }: { to: number; ms?: number }) {
+  const [n, setN] = useState(0);
+  useEffect(() => { const t0 = performance.now(); let raf = 0; const tick = (t: number) => { const k = Math.min(1, (t - t0) / ms); setN(Math.round(to * (1 - Math.pow(1 - k, 3)))); if (k < 1) raf = requestAnimationFrame(tick); }; raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf); }, [to, ms]);
+  return <>{n}</>;
+}
+
+/** Small team status rows shown in solo mode (everyone who is not on screen). */
+function TeamHud({ side, list, front, tired, onSelect, pending = [] }: { side: 'ally' | 'foe'; list: Battler[]; front: string | null; tired: string[]; onSelect?: (uid: string) => void; pending?: string[] }) {
+  if (!list.length) return null;
+  return (
+    <div className={`hud hud-${side}`}>
+      {list.map(b => (
+        <button key={b.uid} className={`hud-chip ${b.uid === front ? 'front' : ''} ${b.fainted ? 'down' : ''} ${tired.includes(b.uid) ? 'tired' : ''}`} disabled={!onSelect || b.fainted} onClick={() => onSelect?.(b.uid)}>
+          <Sprite id={b.speciesId} shiny={b.shiny} size={34} />
+          <div className="hud-info"><div className="hud-name">{b.isBoss && '👑'}{b.name}{tired.includes(b.uid) && ' 💤'}{pending.includes(b.uid) && <span className="pending-dot" style={{ marginLeft: 4 }} />}</div><HpBar hp={b.hp} max={b.maxHp} /><div className="hud-sub">Lv.{b.level} {b.side === 'ally' && b.ownerName !== 'やせい' ? `・${b.ownerName}` : ''}</div></div>
+        </button>
+      ))}
     </div>
   );
 }
