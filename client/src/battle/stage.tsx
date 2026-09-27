@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { getMove, getSpecies, artworkUrl, TYPE_COLOR, effectivenessText, typeMultiplier, SPECIAL_JA, type Battler, type BattleEvent, type StatStages, type MoveFx } from '@pkfriend/shared';
-import { FxEngine } from './effects';
+import { FxEngine, type Body, type Act } from './effects';
 import { sfx } from '../audio';
 import { say, lines } from '../voice';
-import { HpBar, Sprite } from '../components/ui';
+import { HpBar, Sprite, BattleSprite, preloadAnimated } from '../components/ui';
 import { Scene } from '../scenes';
 
 export type BannerKind = '' | 'big' | 'gold' | 'info';
@@ -26,6 +26,8 @@ export interface StageView {
   slowmo: boolean;
   speedlines: boolean;
   nameplate: { text: string; sub?: string } | null;
+  /** move reactions on a pokémon (st-burn, st-freeze, …) layered on top of the body animation class */
+  tint: Record<string, string>;
 }
 const STAT_JA: Record<keyof StatStages, string> = { atk: 'こうげき', def: 'ぼうぎょ', spa: 'とくこう', spd: 'とくぼう', spe: 'すばやさ' };
 const FX_SFX: Record<MoveFx, keyof typeof sfx> = { impact: 'hit', slash: 'slash', beam: 'beam', burst: 'burst', shock: 'shock', wave: 'wave', leaf: 'wind', ice: 'ice', aura: 'psychic', quake: 'quake', wind: 'wind', poison: 'wave', psychic: 'psychic', heal: 'heal', buff: 'buff' };
@@ -51,31 +53,46 @@ export interface StageApi {
   /** Cinematic: show only this combatant, big and centered (null = show everyone). */
   solo: (uid: string | null, opts?: { enter?: boolean; callout?: string; nameplate?: { text: string; sub?: string } | null }) => void;
   busy: boolean;
-  refs: { root: RefObject<HTMLDivElement>; canvas: RefObject<HTMLCanvasElement>; engine: RefObject<FxEngine | null> };
+  /** Center, radius and feet position of the pokémon's visible sprite. */
+  bodyOf: (uid: string) => Body;
+  refs: { root: RefObject<HTMLDivElement>; canvas: RefObject<HTMLCanvasElement>; back: RefObject<HTMLCanvasElement>; engine: RefObject<FxEngine | null> };
 }
 
-const initial: StageView = { allies: [], foes: [], cls: {}, banner: null, cutin: null, shake: '', flash: '', pops: [], log: '', zoom: '', zoomOrigin: '50% 50%', focusUid: null, callout: null, solo: null, slowmo: false, speedlines: false, nameplate: null };
+const initial: StageView = { allies: [], foes: [], cls: {}, banner: null, cutin: null, shake: '', flash: '', pops: [], log: '', zoom: '', zoomOrigin: '50% 50%', focusUid: null, callout: null, solo: null, slowmo: false, speedlines: false, nameplate: null, tint: {} };
 
 export function useBattleStage(): StageApi {
   const [view, setView] = useState<StageView>(initial);
   const [busy, setBusy] = useState(false);
-  const root = useRef<HTMLDivElement>(null); const canvas = useRef<HTMLCanvasElement>(null); const engine = useRef<FxEngine | null>(null);
+  const root = useRef<HTMLDivElement>(null); const canvas = useRef<HTMLCanvasElement>(null); const back = useRef<HTMLCanvasElement>(null); const engine = useRef<FxEngine | null>(null);
   const timers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
-  useEffect(() => {
+  useEffect(() => () => { engine.current?.destroy(); engine.current = null; }, []);
+  // (re)attach every commit: the stage renders different DOM in solo and team layouts
+  useLayoutEffect(() => {
     if (!canvas.current) return;
-    engine.current = new FxEngine(canvas.current);
-    const ro = new ResizeObserver(() => engine.current?.resize()); ro.observe(canvas.current);
-    return () => { ro.disconnect(); engine.current?.destroy(); engine.current = null; };
-  }, []);
+    if (!engine.current) engine.current = new FxEngine(canvas.current, back.current);
+    else if (!engine.current.isAttached(canvas.current, back.current)) engine.current.attach(canvas.current, back.current);
+  });
 
   const posOf = useCallback((uid: string) => {
-    const r = root.current; const el = r?.querySelector(`[data-uid="${uid}"] .art`) as HTMLElement | null;
+    const r = root.current; const el = (r?.querySelector(`[data-uid="${uid}"] .art > .sprite`) ?? r?.querySelector(`[data-uid="${uid}"] .art`)) as HTMLElement | null;
     if (!r || !el) return { x: (r?.clientWidth ?? 300) / 2, y: (r?.clientHeight ?? 300) / 2 };
     const rr = r.getBoundingClientRect(), er = el.getBoundingClientRect();
     return { x: er.left - rr.left + er.width / 2, y: er.top - rr.top + er.height / 2 };
   }, []);
 
+  const bodyOf = useCallback((uid: string): Body => {
+    const r = root.current; const el = (r?.querySelector(`[data-uid="${uid}"] .art > .sprite`) ?? r?.querySelector(`[data-uid="${uid}"] .art`)) as HTMLElement | null;
+    if (!r || !el) { const w = r?.clientWidth ?? 390, h = r?.clientHeight ?? 600; return { x: w / 2, y: h * 0.44, r: 90, ground: h * 0.44 + 90 }; }
+    const rr = r.getBoundingClientRect(), er = el.getBoundingClientRect();
+    return { x: er.left - rr.left + er.width / 2, y: er.top - rr.top + er.height * 0.55, r: Math.max(40, Math.min(er.width, er.height) * 0.45), ground: er.bottom - rr.top - 4 };
+  }, []);
+  const tintTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const react = useCallback((uid: string, cls: string, ms: number) => {
+    setView(v => ({ ...v, tint: { ...v.tint, [uid]: cls } }));
+    if (tintTimers.current[uid]) clearTimeout(tintTimers.current[uid]);
+    tintTimers.current[uid] = setTimeout(() => setView(v => ({ ...v, tint: { ...v.tint, [uid]: '' } })), ms);
+  }, []);
   const setClass = useCallback((uid: string, cls: string, ms?: number) => {
     setView(v => ({ ...v, cls: { ...v.cls, [uid]: cls } }));
     if (timers.current[uid]) clearTimeout(timers.current[uid]);
@@ -87,7 +104,7 @@ export function useBattleStage(): StageApi {
   const pop = useCallback((uid: string, text: string, cls = '') => { const id = ++popSeq; setView(v => ({ ...v, pops: [...v.pops, { id, uid, text, cls }] })); setTimeout(() => setView(v => ({ ...v, pops: v.pops.filter(p => p.id !== id) })), 1100); }, []);
   const playFx = useCallback((fx: MoveFx, from: string, to: string, color: string) => { engine.current?.play(fx, posOf(from), posOf(to), color); }, [posOf]);
   const setLog = useCallback((log: string) => setView(v => ({ ...v, log })), []);
-  const setBattlers = useCallback((allies: Battler[], foes: Battler[]) => setView(v => ({ ...v, allies: allies.map(a => ({ ...a })), foes: foes.map(f => ({ ...f })) })), []);
+  const setBattlers = useCallback((allies: Battler[], foes: Battler[]) => { for (const b of [...allies, ...foes]) preloadAnimated(b.speciesId, b.shiny); setView(v => ({ ...v, allies: allies.map(a => ({ ...a })), foes: foes.map(f => ({ ...f })) })); }, []);
   const punch = useCallback((uid: string, scale = 1.14, ms = 450) => {
     const r = root.current; if (!r) return; const p = posOf(uid);
     setView(v => ({ ...v, zoom: `scale(${scale})`, zoomOrigin: `${(p.x / r.clientWidth) * 100}% ${(p.y / r.clientHeight) * 100}%` }));
@@ -106,6 +123,7 @@ export function useBattleStage(): StageApi {
   const nameOf = (v: StageView, uid: string) => [...v.allies, ...v.foes].find(b => b.uid === uid);
 
   const viewRef = useRef(view); viewRef.current = view;
+  const heavyRef = useRef(false);
 
   const play = useCallback(async (events: BattleEvent[], opts: { speed?: number; cinematic?: boolean; restoreSolo?: string | null } = {}) => {
     const sp = opts.speed ?? 1; const wait = (ms: number) => sleep(ms / sp);
@@ -117,55 +135,63 @@ export function useBattleStage(): StageApi {
         case 'move_used': {
           const u = nameOf(v, e.userUid); const t = nameOf(v, e.targetUid); if (!u) break;
           const m = getMove(e.moveId); const color = TYPE_COLOR[m.type];
+          const eng = engine.current;
           setLog(`${u.name}の ${m.ja}！`);
           say(lines.move(getSpecies(u.speciesId).ja, m.ja), { priority: true });
           const cinematic = viewRef.current.solo !== null || opts.cinematic;
+          const act: Act = eng?.actOf(m.id) ?? 'dash';
           if (!cinematic) {
             await focus(u.uid, `${m.ja}！`); punch(u.uid, 1.1, 500); await wait(520);
             if (m.power >= 90) { sfx.cutin(); setView(x => ({ ...x, cutin: { moveId: m.id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny } })); await wait(950); setView(x => ({ ...x, cutin: null })); }
             if (m.category === 'physical') { sfx.lunge(); setClass(u.uid, u.side === 'ally' ? 'lunge-right' : 'lunge-left', 600); await wait(260); }
-            else { sfx.cast(); setClass(u.uid, 'charge', 700); await wait(300); }
-            playFx(m.fx, u.uid, (t ?? u).uid, color); sfx[FX_SFX[m.fx]]();
-            await wait(m.fx === 'beam' || m.fx === 'wave' ? 450 : 300);
-            void focus(null);
+            else { sfx.cast(); setClass(u.uid, act === 'rise' || act === 'roar' ? act : 'blast', 900); await wait(300); }
+            sfx[FX_SFX[m.fx]]();
+            if (eng && t && t.uid !== u.uid) { const tb = bodyOf(t.uid); const info = eng.impact(m.id, tb, tb.x >= bodyOf(u.uid).x ? 1 : -1); await wait(info.hitAt); if (info.react) react(t.uid, `st-${info.react}`, 1600); heavyRef.current = !!info.heavy; }
+            else if (eng) await wait(eng.launch(m.id, bodyOf(u.uid), u.side === 'ally' ? 1 : -1));
+            void focus(null); void color;
             break;
           }
-          // ---- 1. close-up on the attacker: name plate, charge-up aura, speed lines (≈2.6s)
+          const dir = u.side === 'ally' ? 1 : -1;
+          // ---- 1. close-up on the attacker: name plate, move callout, type-flavoured power-up (≈2.8s)
           setView(x => ({ ...x, solo: u.uid, callout: null, nameplate: { text: u.name, sub: u.ownerId === 'wild' ? 'やせいの ポケモン' : u.ownerName }, speedlines: false }));
           setClass(u.uid, 'stepin', 700); sfx.lunge();
-          await wait(700);
+          await wait(750);
           punch(u.uid, 1.08, 2200);
           setView(x => ({ ...x, speedlines: true, callout: { uid: u.uid, text: `${m.ja}！` } }));
-          sfx.cast(); setClass(u.uid, 'charge', 2000);
-          for (let k = 0; k < 3; k++) { playFx(m.category === 'physical' ? 'buff' : 'aura', u.uid, u.uid, color); await wait(600); }
+          sfx.cast(); setClass(u.uid, 'powerup', 1900);
+          eng?.charge(m.id, bodyOf(u.uid), dir, 1800);
+          await wait(1800);
           if (u.side === 'ally') sfx.buff(); else sfx.debuff();
-          await wait(300);
+          await wait(250);
           // ---- 2. cut-in with the move name (≈1.1s)
           sfx.cutin(); setView(x => ({ ...x, cutin: { moveId: m.id, userUid: u.uid, speciesId: u.speciesId, shiny: u.shiny }, speedlines: false }));
           await wait(1050); setView(x => ({ ...x, cutin: null }));
-          // ---- 3. launch: the attacker dashes / fires toward the opponent (≈1.0s)
-          const r = root.current; const W = r?.clientWidth ?? 390, H = r?.clientHeight ?? 600;
-          const toRight = u.side === 'ally';
-          setClass(u.uid, toRight ? 'launch-right' : 'launch-left', 900);
+          // ---- 3. launch: the attacker acts out the move and the attack flies off screen (≈0.9s)
+          if (act === 'dash') { setClass(u.uid, 'windup', 320); await wait(260); setClass(u.uid, 'launch', 1100); sfx.lunge(); }
+          else setClass(u.uid, act, 1100);
+          setView(x => ({ ...x, speedlines: act === 'dash' }));
           sfx[FX_SFX[m.fx]]();
-          engine.current?.play(m.fx, posOf(u.uid), { x: toRight ? W + 60 : -60, y: H * 0.45 }, color);
-          setView(x => ({ ...x, speedlines: true }));
-          await wait(850);
-          // ---- 4. cut to the target: the attack comes in from the side (≈0.7s)
+          const outMs = eng ? eng.launch(m.id, bodyOf(u.uid), dir) : 800;
+          if (act === 'stomp' || act === 'burrow') setTimeout(() => shake(act === 'stomp'), act === 'stomp' ? 450 : 150);
+          await wait(outMs);
+          // ---- 4. cut to the target: the move arrives and lands (≈0.3–0.5s), the hit itself is the damage event
           if (t && t.uid !== u.uid) {
             flash('on dark');
-            setView(x => ({ ...x, solo: t.uid, callout: null, nameplate: { text: t.name, sub: t.ownerId === 'wild' ? 'やせいの ポケモン' : t.ownerName } }));
-            await wait(250);
-            engine.current?.play(m.fx, { x: toRight ? -60 : W + 60, y: H * 0.45 }, posOf(t.uid), color);
-            if (m.fx === 'beam' || m.fx === 'shock' || m.fx === 'wave') sfx[FX_SFX[m.fx]]();
-            await wait(450);
+            setView(x => ({ ...x, solo: t.uid, callout: null, speedlines: false, nameplate: { text: t.name, sub: t.ownerId === 'wild' ? 'やせいの ポケモン' : t.ownerName } }));
+            await wait(280);
+            eng?.clear();
+            const info = eng ? eng.impact(m.id, bodyOf(t.uid), dir) : { hitAt: 400 };
+            heavyRef.current = !!info.heavy;
+            await wait(info.hitAt);
+            sfx[FX_SFX[m.fx]]();
+            if (info.react) react(t.uid, `st-${info.react}`, 1800);
           } else { setView(x => ({ ...x, speedlines: false })); }
           break;
         }
         case 'miss': sfx.miss(); await banner('しかし はずれた！', '', 700 / sp); break;
         case 'damage': {
           const t = nameOf(v, e.targetUid); if (!t) break;
-          const big = e.effectiveness >= 2 || e.crit || e.amount >= t.maxHp * 0.3;
+          const big = e.effectiveness >= 2 || e.crit || e.amount >= t.maxHp * 0.3 || heavyRef.current; heavyRef.current = false;
           const cinematic = viewRef.current.solo !== null || opts.cinematic;
           setClass(t.uid, 'hit', 500); shake(big); punch(t.uid, big ? 1.28 : 1.15, cinematic ? 1400 : 500);
           if (e.crit) { flash('on crit'); sfx.crit(); } else if (e.effectiveness >= 2) { flash('on'); sfx.superEff(); }
@@ -203,9 +229,12 @@ export function useBattleStage(): StageApi {
     }
     if (opts.restoreSolo !== undefined) setView(x => ({ ...x, solo: opts.restoreSolo ?? null, nameplate: null, speedlines: false, slowmo: false }));
     setBusy(false);
-  }, [banner, flash, playFx, pop, setClass, setLog, shake, focus, punch, posOf]);
+  }, [banner, flash, playFx, pop, setClass, setLog, shake, focus, punch, posOf, bodyOf, react]);
 
-  return useMemo(() => ({ view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, playFx, setLog, punch, focus, solo, busy, refs: { root, canvas, engine } }), [view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, playFx, setLog, punch, focus, solo, busy]);
+  const api = useMemo(() => ({ view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, bodyOf, playFx, setLog, punch, focus, solo, busy, refs: { root, canvas, back, engine } }), [view, setBattlers, play, setClass, banner, flash, shake, pop, posOf, bodyOf, playFx, setLog, punch, focus, solo, busy]);
+  // debug handle for the E2E scripts (window.__pk is created in main.tsx)
+  useEffect(() => { const w = window as unknown as { __pk?: Record<string, unknown> }; if (w.__pk) w.__pk.stage = api; });
+  return api;
 }
 
 // ------------------------------------------------------------------ presentational stage
@@ -249,8 +278,9 @@ export function BattleStage({ api, bg, scene, myOwnerId, pendingUids = [], emote
       <div ref={api.refs.root} className={`stage solo-mode ${v.shake} ${v.slowmo ? 'slowmo' : ''}`}>
         <div className="bg" style={{ background: bg }}>{scene && <Scene id={scene} />}</div>
         {v.speedlines && <div className="speedlines" />}
+        <canvas ref={api.refs.back} className="fxcanvas back" />
         <div className="zoom" style={{ transform: v.zoom, transformOrigin: v.zoomOrigin }}>
-          {b && <Combatant key={b.uid} b={b} cls={`${v.cls[b.uid] ?? ''} solo`} size={Math.min(300, (api.refs.root.current?.clientWidth ?? 390) * 0.72)} style={{ left: '50%', top: 'calc(44% + var(--safe-t) / 2)', transform: 'translate(-50%,-50%)' }} pops={v.pops} mine={!!myOwnerId && b.ownerId === myOwnerId} tired={select.tiredUids?.includes(b.uid)} callout={v.callout?.uid === b.uid ? v.callout.text : undefined} emotes={emotes.filter(e => e.playerId === b.ownerId)} />}
+          {b && <Combatant key={b.uid} b={b} cls={`${v.cls[b.uid] ?? ''} ${v.tint[b.uid] ?? ''} solo`} size={Math.min(300, (api.refs.root.current?.clientWidth ?? 390) * 0.72)} style={{ left: '50%', top: 'calc(44% + var(--safe-t) / 2)', transform: 'translate(-50%,-50%)' }} pops={v.pops} mine={!!myOwnerId && b.ownerId === myOwnerId} tired={select.tiredUids?.includes(b.uid)} callout={v.callout?.uid === b.uid ? v.callout.text : undefined} emotes={emotes.filter(e => e.playerId === b.ownerId)} />}
         </div>
         {v.nameplate && <div className={`nameplate ${b?.side ?? ''}`}><b>{v.nameplate.text}</b>{v.nameplate.sub && <small>{v.nameplate.sub}</small>}</div>}
         <TeamHud side="foe" list={v.foes} front={select.targetUid ?? null} tired={[]} />
@@ -266,16 +296,17 @@ export function BattleStage({ api, bg, scene, myOwnerId, pendingUids = [], emote
   return (
     <div ref={api.refs.root} className={`stage ${v.shake} ${v.focusUid ? 'focusing' : ''} ${duel ? 'duel' : ''}`}>
       <div className="bg" style={{ background: bg }}>{scene && <Scene id={scene} />}</div>
+      <canvas ref={api.refs.back} className="fxcanvas back" />
       <div className="zoom" style={{ transform: v.zoom, transformOrigin: v.zoomOrigin }}>
         {v.foes.map((f, i) => {
           const isFront = !duel || duel.foeUid === f.uid;
           const eff = attacker && select.showMatchup && !f.fainted && isFront ? typeMultiplier(getMove(attacker.moves[0]).type, getSpecies(f.speciesId).types) : null;
-          return <Combatant key={f.uid} b={f} cls={`${v.cls[f.uid] ?? ''} ${select.targetUid === f.uid ? 'target' : ''} ${select.onSelectFoe && !f.fainted ? 'selectable' : ''} ${v.focusUid === f.uid ? 'focus' : ''} ${duel && !isFront ? 'back' : ''} ${duel && isFront ? 'front' : ''}`} size={foeSz(f)}
+          return <Combatant key={f.uid} b={f} cls={`${v.cls[f.uid] ?? ''} ${v.tint[f.uid] ?? ''} ${select.targetUid === f.uid ? 'target' : ''} ${select.onSelectFoe && !f.fainted ? 'selectable' : ''} ${v.focusUid === f.uid ? 'focus' : ''} ${duel && !isFront ? 'back' : ''} ${duel && isFront ? 'front' : ''}`} size={foeSz(f)}
             style={foeStyle(f, i)} pops={v.pops} eff={eff} onClick={select.onSelectFoe && !f.fainted ? () => select.onSelectFoe!(f.uid) : undefined} callout={v.callout?.uid === f.uid ? v.callout.text : undefined} compact={!!duel && !isFront} />;
         })}
         {v.allies.map((a, i) => {
           const isFront = !duel || duel.allyUid === a.uid;
-          return <Combatant key={a.uid} b={a} cls={`${v.cls[a.uid] ?? ''} ${select.attackerUid === a.uid ? 'attacker' : ''} ${select.tiredUids?.includes(a.uid) ? 'tired' : ''} ${select.onSelectAlly && !a.fainted ? 'selectable' : ''} ${v.focusUid === a.uid ? 'focus' : ''} ${duel && !isFront ? 'back' : ''} ${duel && isFront ? 'front' : ''}`} size={allySz(a)} mine={!!myOwnerId && a.ownerId === myOwnerId} pending={pendingUids.includes(a.uid)}
+          return <Combatant key={a.uid} b={a} cls={`${v.cls[a.uid] ?? ''} ${v.tint[a.uid] ?? ''} ${select.attackerUid === a.uid ? 'attacker' : ''} ${select.tiredUids?.includes(a.uid) ? 'tired' : ''} ${select.onSelectAlly && !a.fainted ? 'selectable' : ''} ${v.focusUid === a.uid ? 'focus' : ''} ${duel && !isFront ? 'back' : ''} ${duel && isFront ? 'front' : ''}`} size={allySz(a)} mine={!!myOwnerId && a.ownerId === myOwnerId} pending={pendingUids.includes(a.uid)}
             style={allyStyle(a, i)} pops={v.pops}
             emotes={emotes.filter(e => e.playerId === a.ownerId)} tired={select.tiredUids?.includes(a.uid)} onClick={select.onSelectAlly && !a.fainted ? () => select.onSelectAlly!(a.uid) : undefined} callout={v.callout?.uid === a.uid ? v.callout.text : undefined} compact={!!duel && !isFront} />;
         })}
@@ -295,14 +326,15 @@ function Combatant({ b, cls, size, style, mine, pending, pops, emotes = [], eff,
   const s = getSpecies(b.speciesId);
   if (compact) return (
     <div className={`combatant ${b.side} ${cls} ${mine ? 'mine' : ''}`} data-uid={b.uid} style={{ ...style, width: size }} onClick={onClick}>
-      <div className="art" style={{ width: size, height: size }}><Sprite id={b.speciesId} shiny={b.shiny} size="100%" />{tired && <span className="zz">💤</span>}{pops.filter(p => p.uid === b.uid).map(p => <div key={p.id} className={`dmg ${p.cls}`} style={{ left: '50%', top: '40%' }}>{p.text}</div>)}</div>
+      <div className="art" style={{ width: size, height: size }}><BattleSprite id={b.speciesId} shiny={b.shiny} box={size} />{tired && <span className="zz">💤</span>}{pops.filter(p => p.uid === b.uid).map(p => <div key={p.id} className={`dmg ${p.cls}`} style={{ left: '50%', top: '40%' }}>{p.text}</div>)}</div>
       <div className="mini-hp"><HpBar hp={b.hp} max={b.maxHp} /></div>
     </div>
   );
   return (
     <div className={`combatant ${b.side} ${cls} ${mine ? 'mine' : ''} ${b.isBoss ? 'boss' : ''}`} data-uid={b.uid} style={{ ...style, width: size }} onClick={onClick}>
+      {/launch/.test(cls) && [1, 2, 3].map(i => <div key={i} className={`art ghost g${i}`} style={{ width: size, height: size }}><BattleSprite id={b.speciesId} shiny={b.shiny} box={size} /></div>)}
       <div className="art" style={{ width: size, height: size }}>
-        <Sprite id={b.speciesId} shiny={b.shiny} size="100%" />
+        <BattleSprite id={b.speciesId} shiny={b.shiny} box={size} />
         {callout && <div className="callout">{callout}</div>}
         {tired && <span className="zz">💤</span>}
         {eff !== null && eff !== undefined && <span className={`eff-tag ${eff >= 2 ? 'super' : eff === 0 ? 'none' : eff < 1 ? 'weak' : ''}`}>{eff >= 2 ? 'ばつぐん' : eff === 0 ? 'こうかなし' : eff < 1 ? 'いまひとつ' : 'ふつう'}</span>}

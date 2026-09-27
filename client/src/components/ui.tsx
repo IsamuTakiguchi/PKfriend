@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { artworkUrl, getSpecies, getMove, TYPE_COLOR, TYPE_JA, levelFromExp, displayName, expToNext, gradeOf, pokeEne, speedLevel, calcStats, SPECIAL_JA, type TypeName, type OwnedPokemon } from '@pkfriend/shared';
+import { artworkUrl, animatedUrl, getSpecies, getMove, TYPE_COLOR, TYPE_JA, levelFromExp, displayName, expToNext, gradeOf, pokeEne, speedLevel, calcStats, SPECIAL_JA, type TypeName, type OwnedPokemon } from '@pkfriend/shared';
 import { useToast } from '../toast';
 
 export function Sprite({ id, shiny, size = 96, className = '', silhouette = false, style }: { id: number; shiny?: boolean; size?: number | string; className?: string; silhouette?: boolean; style?: React.CSSProperties }) {
@@ -9,6 +9,27 @@ export function Sprite({ id, shiny, size = 96, className = '', silhouette = fals
   if (err) return <div className={`sprite-fallback ${className}`} style={{ width: dim, height: dim, background: TYPE_COLOR[s.types[0]], ...style }}>{s.ja}</div>;
   return <img className={`sprite ${silhouette ? 'silhouette' : ''} ${className}`} style={{ width: dim, height: dim, ...style }} src={artworkUrl(id, shiny)} alt={s.ja} onError={() => setErr(true)} draggable={false} />;
 }
+
+/**
+ * Animated battle sprite: the GIF keeps its natural proportions (a Pikachu stays smaller than a Charizard),
+ * scaled up to fill at most `box` px and anchored to the bottom of the box so it stands on the ground.
+ * Falls back to the static official artwork when the GIF is missing.
+ */
+export function BattleSprite({ id, shiny, box, maxScale = 3.4 }: { id: number; shiny?: boolean; box: number; maxScale?: number }) {
+  const [failed, setFailed] = useState(false);
+  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
+  const [key, setKey] = useState(`${id}:${shiny}`);
+  if (key !== `${id}:${shiny}`) { setKey(`${id}:${shiny}`); setFailed(false); setNat(null); }
+  if (failed) return <Sprite id={id} shiny={shiny} size="100%" className="static" />;
+  const k = nat ? Math.min((box * 0.94) / Math.max(nat.w, nat.h), maxScale) : 0;
+  return (
+    <img className="sprite ani" src={animatedUrl(id, shiny)} alt={getSpecies(id).ja} draggable={false}
+      style={nat ? { width: Math.round(nat.w * k), height: Math.round(nat.h * k) } : { width: box * 0.6, height: box * 0.6, visibility: 'hidden' }}
+      onLoad={e => { const im = e.currentTarget; if (im.naturalWidth) setNat({ w: im.naturalWidth, h: im.naturalHeight }); }}
+      onError={() => setFailed(true)} />
+  );
+}
+export function preloadAnimated(id: number, shiny?: boolean) { const im = new Image(); im.src = animatedUrl(id, shiny); }
 
 export function TypeBadge({ t }: { t: TypeName }) { return <span className="pill" style={{ background: TYPE_COLOR[t] }}>{TYPE_JA[t]}</span>; }
 export function Types({ id }: { id: number }) { return <span className="row" style={{ gap: 4 }}>{getSpecies(id).types.map(t => <TypeBadge key={t} t={t} />)}</span>; }

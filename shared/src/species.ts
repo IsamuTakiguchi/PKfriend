@@ -26,6 +26,10 @@ export function stageOf(id: number): number { let s = getSpecies(id); let n = 0;
 export function artworkUrl(id: number, shiny = false): string {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${shiny ? 'shiny/' : ''}${id}.png`;
 }
+/** Animated 3D-model sprite (Pokémon Showdown renders mirrored in the PokeAPI sprites repo). Faces left. */
+export function animatedUrl(id: number, shiny = false): string {
+  return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/${shiny ? 'shiny/' : ''}${id}.gif`;
+}
 export function iconUrl(id: number): string {
   return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${id}.png`;
 }

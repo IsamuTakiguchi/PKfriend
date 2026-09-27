@@ -83,14 +83,17 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .zoom { transition: transform .5s cubic-bezier(.2,.8,.2,1); transform-origin: 50% 50%; position: absolute; inset: 0; }
 
 .combatant { position: absolute; display: flex; flex-direction: column; align-items: center; transition: left .5s, bottom .5s, top .5s, right .5s, width .5s; }
-.combatant .art { position: relative; transition: transform .25s, filter .2s; animation: idle 3s ease-in-out infinite; }
-.combatant.ally .art { animation-delay: -1.5s; }
-.combatant.ally .art img { transform: scaleX(-1); }
+.combatant { --d: -1; --flip: 1; }
+.combatant.ally { --d: 1; --flip: -1; } /* allies face right (mirrored), foes face left */
+.combatant .art { position: relative; display: flex; align-items: flex-end; justify-content: center; transition: transform .25s, filter .2s; }
+.combatant .art:has(> .static) { animation: idle 3s ease-in-out infinite; } /* only the still artwork needs a fake bob */
+.combatant .art > .sprite { transform: scaleX(var(--flip)); }
+.sprite.ani { image-rendering: pixelated; filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
 @keyframes idle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .combatant.lunge-right .art { animation: lungeR .5s; } .combatant.lunge-left .art { animation: lungeL .5s; }
 @keyframes lungeR { 30% { transform: translate(40px,-20px) scale(1.05); } 60% { transform: translate(60px,-30px) scale(1.08); } 100% { transform: translate(0,0); } }
 @keyframes lungeL { 30% { transform: translate(-40px,20px) scale(1.05); } 60% { transform: translate(-60px,30px) scale(1.08); } 100% { transform: translate(0,0); } }
-.combatant.hit .art { animation: hit .45s; } @keyframes hit { 0%,100% { filter: none; transform: translateX(0); } 20% { filter: brightness(3) saturate(0); transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { filter: brightness(2); transform: translateX(-6px); } }
+.combatant.hit .art { animation: hit .5s; } @keyframes hitOld { 0%,100% { filter: none; transform: translateX(0); } 20% { filter: brightness(3) saturate(0); transform: translateX(-10px); } 40% { transform: translateX(10px); } 60% { filter: brightness(2); transform: translateX(-6px); } }
 .combatant.faint .art { animation: faint 1s forwards; } @keyframes faint { to { transform: translateY(60px) scale(.8); opacity: 0; filter: grayscale(1) brightness(.4); } }
 .combatant.gone { opacity: 0; pointer-events: none; }
 .combatant.charge .art { animation: charge .8s; } @keyframes charge { 0%,100% { filter: none; } 50% { filter: brightness(1.6) drop-shadow(0 0 24px #fff); transform: scale(1.06); } }
@@ -254,7 +257,53 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 @keyframes launchR { 0% { transform: translate(0,0) scale(1); } 35% { transform: translate(-30px,10px) scale(.94); } 100% { transform: translate(420px,-40px) scale(1.5); opacity: 0; } }
 @keyframes launchL { 0% { transform: translate(0,0) scale(1); } 35% { transform: translate(30px,10px) scale(.94); } 100% { transform: translate(-420px,-40px) scale(1.5); opacity: 0; } }
 .combatant.reel .art { animation: reel 1.4s ease-out; }
-@keyframes reel { 0% { transform: translate(18px,-6px) rotate(6deg); filter: brightness(1.8); } 30% { transform: translate(-10px,4px) rotate(-4deg); } 60% { transform: translate(6px,0) rotate(2deg); } 100% { transform: translate(0,0) rotate(0); } }
+@keyframes hit { 0% { filter: brightness(3) saturate(0); transform: translateX(calc(var(--d) * -28px)) scale(.92,1.05); } 14% { filter: none; } 28% { filter: brightness(3) saturate(0); transform: translateX(calc(var(--d) * -18px)) rotate(calc(var(--d) * -4deg)); } 42% { filter: none; } 65% { transform: translateX(calc(var(--d) * -6px)); } 100% { transform: none; filter: none; } }
+@keyframes reel { 0% { transform: translate(calc(var(--d) * -18px),-6px) rotate(calc(var(--d) * -6deg)); filter: brightness(1.8); } 30% { transform: translate(calc(var(--d) * 10px),4px) rotate(calc(var(--d) * 4deg)); } 60% { transform: translate(calc(var(--d) * -6px),0) rotate(calc(var(--d) * -2deg)); } 100% { transform: translate(0,0) rotate(0); } }
+
+/* ---------------------------------------------------------------- attacker body actions (per move, see effects.ts Act) */
+.fxcanvas.back { z-index: 0; }
+.combatant .art.ghost { position: absolute; left: 0; top: 0; pointer-events: none; }
+.combatant .art.ghost > .sprite { filter: brightness(1.7) saturate(.5); }
+.combatant .art.g1 > .sprite { opacity: .5; } .combatant .art.g2 > .sprite { opacity: .3; } .combatant .art.g3 > .sprite { opacity: .16; }
+.combatant.powerup .art { animation: powerup 1.9s linear; }
+@keyframes powerup { 0% { transform: none; filter: none; } 10% { transform: scale(1.05,.95); } 20%,40%,60%,80% { transform: translateX(-2px) scale(1.05,.95); filter: brightness(1.2); } 30%,50%,70%,90% { transform: translateX(2px) scale(1.05,.95); filter: brightness(1.45); } 100% { transform: scale(1.02); filter: brightness(1.15); } }
+.combatant.windup .art { animation: windup .3s ease-out forwards; }
+@keyframes windup { to { transform: translateX(calc(var(--d) * -24px)) scale(1.1,.84); } }
+.combatant.launch .art { animation: launch .95s cubic-bezier(.55,0,.9,.45) forwards; }
+.combatant.launch .art.g1 { animation-delay: .05s; } .combatant.launch .art.g2 { animation-delay: .1s; } .combatant.launch .art.g3 { animation-delay: .15s; }
+.combatant.launch .art.ghost { animation-fill-mode: both; }
+@keyframes launch { 0% { transform: translateX(calc(var(--d) * -24px)) scale(1.1,.84); } 22% { transform: translateX(calc(var(--d) * 26px)) scale(1.2,.84); } 100% { transform: translate(calc(var(--d) * 540px), -30px) scale(1.35,.9); opacity: 0; } }
+.combatant.blast .art { animation: blast 1s ease-out; }
+@keyframes blast { 0% { transform: none; } 8% { transform: translateX(calc(var(--d) * -22px)) scale(1.08,.92); filter: brightness(1.5); } 14%,26%,38%,50%,62% { transform: translate(calc(var(--d) * -12px), 2px) scale(1.04,.96); } 20%,32%,44%,56%,68% { transform: translate(calc(var(--d) * -15px), -2px) scale(1.04,.96); filter: brightness(1.3); } 100% { transform: none; filter: none; } }
+.combatant.throw .art { animation: throwact .8s ease-out; }
+@keyframes throwact { 30% { transform: translateX(calc(var(--d) * -24px)) rotate(calc(var(--d) * -10deg)) scale(1.05,.95); } 45% { transform: translateX(calc(var(--d) * 28px)) rotate(calc(var(--d) * 12deg)) scale(.97,1.05); } 70% { transform: translateX(calc(var(--d) * 6px)) rotate(calc(var(--d) * 2deg)); } 100% { transform: none; } }
+.combatant.stomp .art { animation: stomp .9s; }
+@keyframes stomp { 0% { transform: none; animation-timing-function: ease-out; } 40% { transform: translateY(-86px) scale(.94,1.1); animation-timing-function: ease-in; } 52% { transform: translateY(0) scale(1.24,.74); } 64% { transform: scale(.96,1.06); } 80% { transform: scale(1.03,.98); } 100% { transform: none; } }
+.combatant.burrow .art { clip-path: inset(-200% -200% 0 -200%); }
+.combatant.burrow .art > .sprite { animation: burrow .9s ease-in forwards; }
+@keyframes burrow { 0% { transform: scaleX(var(--flip)); } 22% { transform: scaleX(var(--flip)) translateY(-20px); } 100% { transform: scaleX(var(--flip)) translateY(105%); } }
+.combatant.swipe .art { animation: swipe .7s ease-out; }
+@keyframes swipe { 30% { transform: translateX(calc(var(--d) * -14px)) rotate(calc(var(--d) * -8deg)); } 50% { transform: translateX(calc(var(--d) * 34px)) rotate(calc(var(--d) * 10deg)) scale(1.06); } 100% { transform: none; } }
+.combatant.rise .art { animation: rise 1.1s ease-in-out; }
+@keyframes rise { 35%,75% { transform: translateY(-38px) scale(1.05); filter: brightness(1.3) drop-shadow(0 0 20px #fff); } 100% { transform: none; filter: none; } }
+.combatant.roar .art { animation: roar 1s ease-out; }
+@keyframes roar { 12% { transform: scale(1.14,.9) translateY(4px); } 24% { transform: scale(.95,1.07); } 36% { transform: scale(1.12,.92); } 48% { transform: scale(.97,1.04); } 60% { transform: scale(1.08,.95); } 100% { transform: none; } }
+
+/* ---------------------------------------------------------------- target reactions (tint on the sprite itself) */
+.combatant.st-burn .art > .sprite { animation: stburn .22s 7 alternate; }
+@keyframes stburn { from { filter: sepia(1) saturate(5) hue-rotate(-25deg) brightness(1.15) drop-shadow(0 0 14px #ff6d00); } to { filter: sepia(.4) saturate(2) hue-rotate(-15deg); } }
+.combatant.st-freeze .art > .sprite { filter: sepia(1) hue-rotate(160deg) saturate(2.6) brightness(1.25) drop-shadow(0 0 12px #b2ebf2); transition: filter .25s; }
+.combatant.st-shock .art > .sprite { animation: stshock .09s steps(2) 16; }
+@keyframes stshock { 0% { filter: brightness(2.4) sepia(1) saturate(6) hue-rotate(5deg); transform: scaleX(var(--flip)) translateX(-3px); } 100% { filter: invert(.9) brightness(.9); transform: scaleX(var(--flip)) translateX(3px); } }
+.combatant.st-warp .art > .sprite { animation: stwarp .45s ease-in-out 4; }
+@keyframes stwarp { 0%,100% { transform: scaleX(var(--flip)); filter: none; } 25% { transform: scaleX(var(--flip)) skewX(14deg) scale(1.12,.9); filter: hue-rotate(90deg) saturate(2); } 75% { transform: scaleX(var(--flip)) skewX(-14deg) scale(.9,1.12); filter: hue-rotate(-90deg) saturate(2); } }
+.combatant.st-poison .art > .sprite { animation: stpoison .4s 4 alternate; }
+@keyframes stpoison { to { filter: sepia(1) hue-rotate(230deg) saturate(3) brightness(.9); } }
+.combatant.st-wet .art > .sprite { filter: saturate(1.2) brightness(.92) hue-rotate(-8deg) drop-shadow(0 0 10px #81d4fa); transition: filter .25s; }
+.combatant.st-dark .art > .sprite { animation: stdark .5s 3 alternate; }
+@keyframes stdark { to { filter: brightness(.35) saturate(.4) drop-shadow(0 0 16px #7c4dff); } }
+.combatant.st-shine .art > .sprite { animation: stshine .3s 4 alternate; }
+@keyframes stshine { to { filter: brightness(1.8) saturate(.6); } }
 .dmg.countup { font-size: 46px; animation: dmgcine 2.2s forwards; }
 .dmg.super.countup { font-size: 58px; }
 @keyframes dmgcine { 0% { transform: translate(-50%,-50%) scale(.3); opacity: 0; } 12% { transform: translate(-50%,-80%) scale(1.4); opacity: 1; } 30% { transform: translate(-50%,-90%) scale(1.1); } 80% { transform: translate(-50%,-100%) scale(1.1); opacity: 1; } 100% { transform: translate(-50%,-150%) scale(1); opacity: 0; } }
