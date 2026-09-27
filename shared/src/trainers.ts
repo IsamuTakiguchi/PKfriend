@@ -10,10 +10,12 @@ export const TRAINER_NAMES = ['ケン', 'ユミ', 'ハナ', 'レン', 'ソラ', 
 
 /** A random trainer who ambushes you in an area, with 3 pokémon a little above the wild level. */
 export function makeTrainer(area: Area, level: number, rng: Rng): TrainerDef {
-  const pool = SPECIES.filter(s => !s.legendary && s.types.some(t => area.types.includes(t)) && (s.evolvesFrom || rng() < 0.4));
+  // early on trainers use basic-stage pokémon at about the player's level; later they bring evolved teams a little above it
+  const early = level < 16;
+  const pool = SPECIES.filter(s => !s.legendary && s.types.some(t => area.types.includes(t)) && (early ? !s.evolvesFrom : (s.evolvesFrom || rng() < 0.4)));
   const ids: number[] = [];
   while (ids.length < 3) { const id = pick(rng, pool).id; if (!ids.includes(id) || pool.length < 3) ids.push(id); }
-  return { name: pick(rng, TRAINER_NAMES), title: pick(rng, TRAINER_TITLES), speciesIds: ids, level: Math.min(100, level + randInt(rng, 1, 3)) };
+  return { name: pick(rng, TRAINER_NAMES), title: pick(rng, TRAINER_TITLES), speciesIds: ids, level: Math.min(100, level + (early ? randInt(rng, 0, 1) : randInt(rng, 1, 3))) };
 }
 export const trainerLabel = (t: TrainerDef) => `${t.title}の ${t.name}`;
 
