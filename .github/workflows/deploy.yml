@@ -102,11 +102,13 @@ jobs:
       - name: Start VOICEVOX engine
         if: steps.vcache.outputs.cache-hit != 'true' && vars.VOICE_DISABLED != 'true'
         run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          ffmpeg -version | head -1
           docker run -d --name voicevox -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:50021/version && break; sleep 3; done
       - name: Synthesize commentary lines
         if: steps.vcache.outputs.cache-hit != 'true' && vars.VOICE_DISABLED != 'true'
-        run: npx tsx scripts/build-voice.mts --engine http://127.0.0.1:50021 --speaker ${{ steps.vkey.outputs.speaker }} --out client/public/voice --format mp3 --concurrency 4
+        run: npx tsx scripts/build-voice.mts --engine http://127.0.0.1:50021 --speaker ${{ steps.vkey.outputs.speaker }} --out client/public/voice --format mp3 --concurrency 3
       - name: Voice bank summary
         run: |
           if [ -f client/public/voice/manifest.json ]; then echo "::notice::voice bank: $(ls client/public/voice | wc -l) files, $(du -sh client/public/voice | cut -f1)"; else echo "::warning::no voice bank (falls back to the device's speech synthesis)"; fi

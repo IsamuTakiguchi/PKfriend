@@ -37,6 +37,10 @@ async function synth(text: string): Promise<Buffer> {
   return Buffer.from(await r.arrayBuffer());
 }
 
+// ffmpeg is required for mp3; fail fast (before spending time on synthesis) if it is missing
+if (FORMAT === 'mp3') { try { execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' }); } catch { console.error('ffmpeg not found: install it (e.g. sudo apt-get install -y ffmpeg) or pass --format wav'); process.exit(2); } }
+// reuse files that already exist on disk (e.g. from a previous partial run) even if the manifest lost them
+for (const t of lines) { if (manifest.files[t] && existsSync(path.join(OUT, manifest.files[t]))) continue; const base = id(t); if (existsSync(path.join(OUT, `${base}.${FORMAT}`))) manifest.files[t] = `${base}.${FORMAT}`; }
 const todo = lines.filter(t => !(manifest.files[t] && existsSync(path.join(OUT, manifest.files[t]))));
 console.log(`voice bank: ${lines.length} lines, ${todo.length} to synthesize (engine ${ENGINE}, speaker ${SPEAKER}, ${FORMAT})`);
 const name = await speakerName(); manifest.credit = `VOICEVOX:${name.replace(/（.*$/, '')}`;
@@ -45,8 +49,8 @@ async function worker() {
   for (;;) {
     const text = todo.shift(); if (text === undefined) return;
     try {
-      const wav = await synth(text); const base = id(text);
-      const wavPath = path.join(OUT, `${base}.wav`); writeFileSync(wavPath, wav);
+      const base = id(text); const wavPath = path.join(OUT, `${base}.wav`);
+      if (!existsSync(wavPath)) { const wav = await synth(text); writeFileSync(wavPath, wav); }
       let file = `${base}.wav`;
       if (FORMAT === 'mp3') { const mp3 = path.join(OUT, `${base}.mp3`); execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', wavPath, '-ac', '1', '-ar', '24000', '-codec:a', 'libmp3lame', '-b:a', '40k', mp3]); execFileSync('rm', ['-f', wavPath]); file = `${base}.mp3`; }
       manifest.files[text] = file; done++;
