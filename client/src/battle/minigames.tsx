@@ -119,26 +119,41 @@ export function AttackRoulette({ title = 'こうげきルーレット！', onDon
   );
 }
 
-// ------------------------------------------------------------------ ボールルーレット: 円盤が回る。とめる or ボールを上に ドラッグして なげる
+// ------------------------------------------------------------------ ボールルーレット: 円盤が回る。ボールを つかんで 上に はじいて なげる（ドラッグのみ）
 export function BallRoulette({ onDone, title = 'ボールルーレット！' }: { onDone: (b: BallKind) => void; title?: string }) {
   const [stopSig, setStopSig] = useState(0); const [stopped, setStopped] = useState<BallKind | null>(null); const [thrown, setThrown] = useState(false);
-  const drag = useRef<{ y: number; t: number } | null>(null); const [dragDy, setDragDy] = useState(0);
+  const drag = useRef<{ x: number; y: number; t: number; id: number } | null>(null); const [pos, setPos] = useState({ x: 0, y: 0 });
   async function done(idx: number) { const b = BALL_WHEEL_ITEMS[idx]; setStopped(b); if (b === 'master') sfx.crit(); else if (b === 'hyper') sfx.superEff(); else sfx.select(); await sleep(1000); onDone(b); }
-  function release(e: React.PointerEvent) {
-    if (!drag.current || stopSig) { drag.current = null; return; }
-    const dy = e.clientY - drag.current.y; const dt = Math.max(1, performance.now() - drag.current.t);
-    drag.current = null; setDragDy(0);
-    if (dy < -70 && -dy / dt > 0.25) { setThrown(true); sfx.throwBall(); setStopSig(1); }
+  // drag handling: window-level listeners so the gesture survives leaving the element (and pointer capture failures)
+  const stopRef = useRef(stopSig); stopRef.current = stopSig;
+  function down(e: React.PointerEvent<HTMLDivElement>) {
+    if (stopRef.current) return;
+    e.preventDefault();
+    const start = { x: e.clientX, y: e.clientY, t: performance.now(), id: e.pointerId };
+    drag.current = start; setPos({ x: 0, y: 0 }); sfx.click();
+    try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* not all browsers allow capture for touch pointers */ }
+    const onMove = (ev: PointerEvent) => { if (!drag.current) return; ev.preventDefault(); setPos({ x: ev.clientX - start.x, y: Math.min(0, ev.clientY - start.y) }); };
+    const onUp = (ev: PointerEvent) => {
+      window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp);
+      if (!drag.current) return; drag.current = null;
+      const dy = ev.clientY - start.y; const dt = Math.max(1, performance.now() - start.t);
+      if (!stopRef.current && (dy < -60 || (dy < -25 && -dy / dt > 0.35))) { setThrown(true); setPos({ x: 0, y: -260 }); sfx.throwBall(); setStopSig(1); }
+      else setPos({ x: 0, y: 0 });
+    };
+    window.addEventListener('pointermove', onMove, { passive: false }); window.addEventListener('pointerup', onUp); window.addEventListener('pointercancel', onUp);
   }
   return (
-    <div className="mg-wrap" onPointerDown={e => { if (!stopSig) drag.current = { y: e.clientY, t: performance.now() }; }} onPointerMove={e => { if (drag.current) setDragDy(Math.min(0, e.clientY - drag.current.y)); }} onPointerUp={release} onPointerCancel={() => { drag.current = null; setDragDy(0); }}>
+    <div className="mg-wrap ballgame">
       <div className="mg-title">{title}</div>
       <BigWheel items={BALL_WHEEL_ITEMS} spinSpeed={200} stopSignal={stopSig} onStopped={done} render={(b, _i, sel) => <BallIcon kind={b} size={sel ? 44 : 34} />} className="ballwheel" />
       {!stopped ? (
-        <>
-          <div className="throw-hint" style={{ transform: `translateY(${dragDy * 0.6}px) scale(${1 - dragDy / 600})` }}><BallIcon kind="monster" size={54} /><small>{thrown ? 'なげた！' : '↑ 上に ドラッグして なげる（タップで とめても OK）'}</small></div>
-          <button className="btn gold lg mg-btn" disabled={stopSig > 0} onPointerDown={e => { e.stopPropagation(); if (!stopSig) { sfx.click(); setStopSig(1); } }}>🎯 とめて なげる！</button>
-        </>
+        <div className="throw-zone">
+          <div className="throw-arrow">⬆</div>
+          <div className={`throw-ball ${thrown ? 'flying' : ''}`} style={{ transform: `translate(${pos.x * 0.4}px, ${pos.y}px) scale(${1 - pos.y / 900})` }} onPointerDown={down}>
+            <BallIcon kind="monster" size={72} />
+          </div>
+          <small>{thrown ? 'なげた！' : 'ボールを つかんで 上に はじこう！'}</small>
+        </div>
       ) : <div className="mg-big" style={{ fontSize: 22 }}>{BALL_JA[stopped]}！<small>{stopped === 'master' ? 'かならず つかまえられる！' : stopped === 'hyper' ? 'とても つかまえやすい！' : stopped === 'super' ? 'つかまえやすい！' : 'ふつうの ボール'}</small></div>}
     </div>
   );

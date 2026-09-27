@@ -183,7 +183,7 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .blink { animation: blink 1s infinite; } @keyframes blink { 50% { opacity: .3; } }
 
 /* ------------------------------------------------ mini games (roulettes) */
-.mg-wrap { position: absolute; inset: 0; z-index: 14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: radial-gradient(ellipse at 50% 40%, rgba(0,0,0,.35), rgba(0,0,0,.75)); animation: fade .2s; touch-action: manipulation; }
+.mg-wrap { position: absolute; inset: 0; z-index: 14; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: radial-gradient(ellipse at 50% 40%, rgba(0,0,0,.35), rgba(0,0,0,.75)); animation: fade .2s; touch-action: none; user-select: none; -webkit-user-select: none; }
 .mg-title { font-size: 22px; font-weight: 900; color: #fff; text-shadow: 0 2px 0 #000, 0 0 20px rgba(255,195,113,.6); animation: bannerin .3s; }
 .wheel { position: relative; width: 240px; height: 240px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.08), rgba(0,0,0,.4)); border: 3px solid rgba(255,255,255,.25); box-shadow: 0 0 40px rgba(0,0,0,.5), inset 0 0 30px rgba(255,255,255,.1); }
 .wheel .seg { position: absolute; left: 50%; top: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; display: grid; place-items: center; font-weight: 900; font-size: 20px; color: #fff; background: rgba(255,255,255,.12); border: 2px solid rgba(255,255,255,.2); transition: transform .1s; }
@@ -299,3 +299,11 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .fall-mark { position: absolute; top: -70px; width: 64px; height: 64px; margin-left: -32px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.95), rgba(255,213,74,.9)); border: 3px solid #fff; font-size: 34px; display: grid; place-items: center; box-shadow: 0 0 24px #ffd54a; animation: fallmark 2.4s linear forwards; touch-action: manipulation; }
 @keyframes fallmark { to { transform: translateY(calc(100vh - 220px)); } }
 .streak { display: flex; gap: 10px; font-size: 28px; padding: 6px 0 14px; } .streak span { opacity: .25; filter: grayscale(1); transition: all .2s; } .streak span.on { opacity: 1; filter: none; transform: scale(1.25); }
+
+/* drag-to-throw ball */
+.throw-zone { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #fff; font-weight: 900; text-shadow: 0 2px 0 #000; touch-action: none; }
+.throw-zone small { font-size: 13px; }
+.throw-arrow { font-size: 26px; color: #ffd54a; animation: bob 0.7s infinite alternate; text-shadow: 0 2px 0 #000; }
+.throw-ball { touch-action: none; cursor: grab; padding: 14px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.25), transparent 70%); transition: transform .08s; will-change: transform; }
+.throw-ball:active { cursor: grabbing; }
+.throw-ball.flying { transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .4s; opacity: 0; }
