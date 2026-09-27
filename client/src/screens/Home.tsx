@@ -38,8 +38,8 @@ export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void 
       <div className="card stack" style={{ gap: 8 }}>
         <div className="row between"><span>🎵 BGM</span><button className={`btn sm ${bgm ? 'gold' : ''}`} onClick={toggleBgm}>{bgm ? 'ON' : 'OFF'}</button></div>
         <div className="row between"><span>🔊 こうかおん</span><button className={`btn sm ${sound ? 'gold' : ''}`} onClick={toggleSound}>{sound ? 'ON' : 'OFF'}</button></div>
-        <div className="row between"><span>🎙️ じっきょう（おとこの こえ）</span><div className="row" style={{ gap: 6 }}><button className="btn sm" onClick={() => say('ようこそ、PKフレンドへ！ きょうも ポケモンを ゲットしよう！', { priority: true })}>テスト</button><button className={`btn sm ${voice ? 'gold' : ''}`} onClick={toggleVoice}>{voice ? 'ON' : 'OFF'}</button></div></div>
-        <div className="small muted">{voiceInfo().available ? `つかう こえ: ${voiceInfo().name}${voiceInfo().male ? '' : '（この端末に 男性ボイスが ないため、ひくい声に 調整しています）'}` : 'この端末には 日本語の 音声合成が ありません（端末の 設定で 日本語音声を 追加すると 実況が 流れます）'}</div>
+        <div className="row between"><span>🎙️ じっきょう（おとこの こえ）</span><div className="row" style={{ gap: 6 }}><button className="btn sm" onClick={() => say('ようこそ、PKフレンドへ！今日もポケモンをゲットしよう！', { priority: true })}>テスト</button><button className={`btn sm ${voice ? 'gold' : ''}`} onClick={toggleVoice}>{voice ? 'ON' : 'OFF'}</button></div></div>
+        <div className="small muted">{voiceInfo().available ? `つかう こえ: ${voiceInfo().name}${voiceInfo().male ? '' : '（この端末に 男性ボイスが ないため、すこし ひくい声に しています。iPhone は 設定→アクセシビリティ→読み上げコンテンツ→声→日本語 で「Otoya（拡張）」を 追加すると 自然な 男性の声に なります）'}` : 'この端末には 日本語の 音声合成が ありません（端末の 設定で 日本語音声を 追加すると 実況が 流れます）'}</div>
       </div>
       <p className="small muted center">みたポケモン {seen.length}しゅるい ／ ID: {player.id}</p>
       <button className="btn ghost sm" style={{ color: 'var(--muted)' }} onClick={() => setConfirmReset(true)}>データを リセットする</button>

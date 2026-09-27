@@ -307,7 +307,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     for (const u of ups) { const p = useStore.getState().box.find(x => x.uid === u.uid); sfx.levelUp(); if (p) say(lines.levelUp(displayName(p), u.to), { priority: true }); api.setClass(u.uid, 'levelup', 1000); await api.banner(`${p ? displayName(p) : ''}は Lv.${u.to}に あがった！`, 'gold', 1100); }
     setLevelUps(ups); if (evoCandidate) setEvo(evoCandidate);
   }
-  function doEvolve() { if (!evo) return; setEvolving(true); sfx.evolve(); say('おや…？ ようすが…！', { priority: true }); setTimeout(() => { const s = getSpecies(evo.to); say(lines.evolve(displayName(evo.p), s.ja), { priority: true }); updatePokemon(evo.p.uid, { speciesId: evo.to, moves: movesFor(s.id, s.types, levelFromExp(evo.p.exp)) }); toast(`おめでとう！ ${displayName(evo.p)}は ${s.ja}に しんかした！`, 'ok'); setEvoDone(true); }, 2500); }
+  function doEvolve() { if (!evo) return; setEvolving(true); sfx.evolve(); say('おや？様子が…！', { priority: true }); setTimeout(() => { const s = getSpecies(evo.to); say(lines.evolve(displayName(evo.p), s.ja), { priority: true }); updatePokemon(evo.p.uid, { speciesId: evo.to, moves: movesFor(s.id, s.types, levelFromExp(evo.p.exp)) }); toast(`おめでとう！ ${displayName(evo.p)}は ${s.ja}に しんかした！`, 'ok'); setEvoDone(true); }, 2500); }
 
   const canChoose = phase === 'choose' && !busy;
   const eff = attacker && target ? typeMultiplier(getMove(attacker.moves[0]).type, getSpecies(target.speciesId).types) : 1;

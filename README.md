@@ -78,6 +78,16 @@ Pages 版のクライアントは、ビルド時に Fly のアドレス（`wss:/
 
 `main` 以外のブランチと PR では `ci.yml` が型チェック・テスト・ビルドだけを実行します。
 
+### 実況の声をもっと自然にする（任意: VOICEVOX）
+
+端末内蔵の音声合成でも実況は流れますが、より自然な男性ボイスにしたい場合は、無料のオープンソース音声合成 **VOICEVOX ENGINE** をサーバーで動かし、その URL をクライアントに渡します。
+
+```bash
+docker run -d -p 50021:50021 voicevox/voicevox_engine:cpu-ubuntu20.04-latest
+```
+
+リポジトリの Variables に `PUBLIC_TTS_URL`（例: `https://tts.example.com`、HTTPS 必須・CORS 許可が必要）と、任意で `PUBLIC_TTS_SPEAKER`（既定 11 = 玄野武宏、13 = 青山龍星 など男性話者）を設定して push すると、実況が VOICEVOX の声になります。エンジンに接続できないときは自動で端末の音声合成に戻ります。VOICEVOX の音声を使う場合は各キャラクターの利用規約（クレジット表記「VOICEVOX:玄野武宏」など）に従ってください。
+
 ### 手動デプロイ
 
 Docker イメージはそのまま Render / Railway / Cloud Run / VPS で動きます。Render は `render.yaml` を Blueprint として読み込むだけで作成できます。ストア配布したい場合は Capacitor で `client/dist` をラップできます。

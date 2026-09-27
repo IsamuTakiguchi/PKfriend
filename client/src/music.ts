@@ -31,89 +31,85 @@ function parse(pattern: string): Step[] {
   return steps;
 }
 
-// ------------------------------------------------------------------ compositions (modern EDM / future bass flavour)
-// Drum tokens: x = hit, X = accent, o = open hat (hat channel), . = rest.  Melodic tokens: note, - hold, . rest, chords with +.
-type Voice2 = Voice | 'supersaw' | 'pad' | 'pluck' | 'sub' | 'bass808' | 'clap' | 'riser' | 'keys';
+// ------------------------------------------------------------------ compositions (orchestral, Pokémon-style)
+// Drum tokens: x = hit, X = accent, o = open hat, . = rest.  Melodic tokens: note, - hold, . rest, chords with +.
+type Voice2 = Voice | 'brass' | 'brassLow' | 'strings' | 'tremolo' | 'flute' | 'piano' | 'pizz' | 'tuba' | 'timpani' | 'march' | 'cymbal' | 'shaker' | 'glock' | 'supersaw' | 'pad' | 'pluck' | 'sub' | 'bass808' | 'clap' | 'riser' | 'keys';
 const b4 = (a: string, b: string, c: string, d: string) => `${a} ${b} ${c} ${d} `;
 const rep = (s: string, n: number) => Array(n).fill(s).join(' ') + ' ';
-const TRACKS: Record<TrackName, { bpm: number; swing?: number; channels: Partial<Record<Voice2, string>> }> = {
-  // Warm future-chill town theme: Fmaj7 – Am7 – Dm7 – G9, plucks, soft sidechained pad
+const TRACKS: Record<TrackName, { bpm: number; channels: Partial<Record<Voice2, string>> }> = {
+  // Town theme: gentle piano arpeggios, flute melody, warm strings, light shaker (F major)
   home: {
-    bpm: 102,
+    bpm: 100,
     channels: {
-      pad: b4('f3+a3+c4+e4 - - - - - - - - - - - - - - -', 'a3+c4+e4+g4 - - - - - - - - - - - - - - -', 'd3+f3+a3+c4 - - - - - - - - - - - - - - -', 'g3+b3+d4+f4 - - - - - - - - - - - - - - -'),
-      sub: b4('f1 - - - - - - - f1 - - . f1 - - -', 'a1 - - - - - - - a1 - - . a1 - - -', 'd1 - - - - - - - d1 - - . d2 - - -', 'g1 - - - - - - - g1 - - . g1 - b1 -'),
-      pluck: b4('c5 . e5 . a5 . e5 . c5 . e5 . a5 . g5 .', 'e5 . g5 . c6 . g5 . e5 . g5 . b5 . g5 .', 'd5 . f5 . a5 . f5 . d5 . f5 . a5 . c6 .', 'd5 . f5 . b5 . f5 . d5 . g5 . b5 . d6 .'),
-      keys: b4('. . . . a5 - - - . . . . g5 - - -', '. . . . e5 - - - . . g5 - c6 - - -', '. . . . f5 - - - . . . . a5 - - -', '. . b5 - d6 - - - c6 - - - - - - -'),
-      kick: b4('x . . . . . . . x . . . . . . .', 'x . . . . . . . x . . . . . x .', 'x . . . . . . . x . . . . . . .', 'x . . . . . . . x . . x . . . .'),
-      clap: rep('. . . . x . . . . . . . x . . .', 4),
-      hat: rep('x . x . X . x . x . x . X . x o', 4),
+      strings: b4('f3+a3+c4 - - - - - - - - - - - - - - -', 'd3+f3+a3 - - - - - - - - - - - - - - -', 'bb2+d3+f3 - - - - - - - - - - - - - - -', 'c3+e3+g3 - - - - - - - - c3+e3+g3+bb3 - - - - - - -'),
+      piano: b4('f3 . c4 . f4 . c4 . a3 . c4 . f4 . c4 .', 'd3 . a3 . d4 . a3 . f3 . a3 . d4 . a3 .', 'bb2 . f3 . bb3 . f3 . d3 . f3 . bb3 . f3 .', 'c3 . g3 . c4 . g3 . e3 . g3 . c4 . bb3 .'),
+      flute: b4('a4 - - - c5 - - - f5 - - - e5 - c5 -', 'd5 - - - - - c5 - a4 - - - - - - -', 'bb4 - - - d5 - - - f5 - - - g5 - a5 -', 'g5 - - - e5 - - - c5 - - - - - - -'),
+      pizz: b4('f2 - - - . . . . c3 - - - . . . .', 'd2 - - - . . . . a2 - - - . . . .', 'bb1 - - - . . . . f2 - - - . . . .', 'c2 - - - . . . . g2 - - - bb2 - - -'),
+      shaker: rep('x . x . X . x . x . x . X . x .', 4),
     },
   },
-  // Progressive house adventure: Am – F – C – G with 9ths, four-on-the-floor, offbeat open hats, riser into the loop
+  // Route theme: cheerful march. Woodwind melody, staccato piano chords, walking tuba, snare with rolls (C major)
   explore: {
-    bpm: 124,
+    bpm: 128,
     channels: {
-      pad: b4('a3+c4+e4+b4 - - - - - - - - - - - - - - -', 'f3+a3+c4+g4 - - - - - - - - - - - - - - -', 'c4+e4+g4+d5 - - - - - - - - - - - - - - -', 'g3+b3+d4+a4 - - - - - - - - - - - - - - -'),
-      sub: b4('a1 - . a1 - . a1 - a1 - . a1 - . g1 -', 'f1 - . f1 - . f1 - f1 - . f1 - . e1 -', 'c2 - . c2 - . c2 - c2 - . c2 - . b1 -', 'g1 - . g1 - . g1 - g1 - . g1 - . g1 -'),
-      pluck: b4('e5 a5 c6 e6 c6 a5 e5 a5 e5 a5 c6 e6 c6 a5 e5 a5', 'c5 f5 a5 c6 a5 f5 c5 f5 c5 f5 a5 c6 a5 f5 c5 f5', 'e5 g5 c6 e6 c6 g5 e5 g5 e5 g5 c6 e6 c6 g5 e5 g5', 'd5 g5 b5 d6 b5 g5 d5 g5 d5 g5 b5 d6 g6 - f#6 -'),
-      supersaw: b4('. . . . . . . . e6 - - - d6 - c6 -', 'a5 - - - - - - - c6 - - - d6 - e6 -', 'e6 - - - - - - - g6 - - - e6 - d6 -', 'b5 - - - c6 - d6 - g5 - - - - - - -'),
-      kick: rep('x . . . x . . . x . . . x . . .', 3) + 'x . . . x . . . x . . . x . x . ',
-      clap: rep('. . . . x . . . . . . . x . . .', 3) + '. . . . x . . . . . . . x . x x ',
-      hat: rep('x . o . x . o . x . o . x . o .', 4),
-      riser: rep('. . . . . . . . . . . . . . . .', 3) + 'x . . . . . . . . . . . . . . . ',
+      tuba: b4('c2 - . . g2 - . . c2 - . . g2 - . .', 'a1 - . . e2 - . . a1 - . . e2 - . .', 'f1 - . . c2 - . . f1 - . . c2 - . .', 'g1 - . . d2 - . . g1 - . . b1 - d2 -'),
+      piano: b4('. . c4+e4+g4 . . . c4+e4+g4 . . . c4+e4+g4 . . . c4+e4+g4 .', '. . a3+c4+e4 . . . a3+c4+e4 . . . a3+c4+e4 . . . a3+c4+e4 .', '. . a3+c4+f4 . . . a3+c4+f4 . . . a3+c4+f4 . . . a3+c4+f4 .', '. . b3+d4+g4 . . . b3+d4+g4 . . . b3+d4+g4 . . . b3+d4+g4 .'),
+      flute: b4('e5 - g5 - c6 - - - b5 - g5 - e5 - g5 -', 'a5 - - - c6 - - - e6 - - - d6 - c6 -', 'a5 - - - f5 - - - c6 - - - a5 - f5 -', 'g5 - - - b5 - d6 - g6 - - - - - - -'),
+      brass: b4('. . . . . . . . . . . . . . . .', '. . . . . . . . . . . . . . . .', '. . . . . . . . . . . . . . . .', 'd5+g5 - - - . . . . b4+d5 - - - g5+b5 - - -'),
+      strings: b4('c4+e4 - - - - - - - - - - - - - - -', 'c4+e4 - - - - - - - - - - - - - - -', 'c4+f4 - - - - - - - - - - - - - - -', 'b3+d4 - - - - - - - - - - - - - - -'),
+      march: b4('x . . x . . x . x . . x . . x .', 'x . . x . . x . x . . x . . x .', 'x . . x . . x . x . . x . . x .', 'x . . x . . x . x x x x X X X X'),
+      timpani: rep('x . . . . . . . x . . . . . . .', 4),
+      cymbal: rep('x . . . . . . . . . . . . . . .', 1) + rep('. . . . . . . . . . . . . . . .', 3),
     },
   },
-  // Future-bass battle: driving kick, supersaw hook, 808-ish sub, snare rolls at the end of the loop
+  // Wild battle: driving tuba eighths, string ostinato, heroic brass melody, timpani and snare (A minor -> C major turn)
   battle: {
-    bpm: 150,
+    bpm: 164,
     channels: {
-      pad: b4('f#3+a3+c#4+e4 - - - - - - - - - - - - - - -', 'd3+f#3+a3+c#4 - - - - - - - - - - - - - - -', 'e3+g#3+b3+d4 - - - - - - - - - - - - - - -', 'c#3+e3+g#3+b3 - - - - - - - - - - - - - - -'),
-      bass808: b4('f#1 - - - f#1 - - - f#1 - f#1 - - - e1 -', 'd1 - - - d1 - - - d1 - d1 - - - c#1 -', 'e1 - - - e1 - - - e1 - e1 - - - d1 -', 'c#1 - - - c#1 - - - c#1 - c#1 - e1 - f#1 -'),
-      supersaw: b4('c#6 - - - a5 - - - f#5 - - - a5 - c#6 -', 'd6 - - - a5 - - - f#5 - - - a5 - d6 -', 'e6 - - - b5 - - - g#5 - - - b5 - e6 -', 'g#5 - - - b5 - - - c#6 - - - e6 - - -'),
-      pluck: b4('f#5 . c#5 . f#5 . a5 . f#5 . c#5 . f#5 . a5 .', 'f#5 . d5 . f#5 . a5 . f#5 . d5 . f#5 . a5 .', 'g#5 . e5 . g#5 . b5 . g#5 . e5 . g#5 . b5 .', 'g#5 . e5 . g#5 . c#6 . g#5 . e5 . b5 . c#6 .'),
-      kick: rep('x . . . x . . . x . . . x . . .', 3) + 'x . . . x . . . x . . . x . x . ',
-      clap: rep('. . . . x . . . . . . . x . . .', 3) + '. . . . x . . . . . x . x x x x ',
-      hat: rep('x . x . x . x . x . x . x . x x', 4),
-      riser: rep('. . . . . . . . . . . . . . . .', 3) + 'x . . . . . . . . . . . . . . . ',
+      tuba: b4('a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 a1 g1 g1 g1 g1', 'f1 f1 f1 f1 f1 f1 f1 f1 e1 e1 e1 e1 e1 e1 e1 e1', 'a1 a1 a1 a1 a1 a1 a1 a1 c2 c2 c2 c2 d2 d2 d2 d2', 'e2 e2 e2 e2 e2 e2 e2 e2 e2 e2 g#1 g#1 b1 b1 e2 e2'),
+      strings: b4('a4 c5 e5 c5 a4 c5 e5 c5 a4 c5 e5 c5 g4 b4 d5 b4', 'f4 a4 c5 a4 f4 a4 c5 a4 e4 g#4 b4 g#4 e4 g#4 b4 g#4', 'a4 c5 e5 c5 a4 c5 e5 c5 c5 e5 g5 e5 d5 f5 a5 f5', 'e5 g#5 b5 g#5 e5 g#5 b5 g#5 e5 g#5 b5 g#5 d5 f5 g#5 f5'),
+      brass: b4('e5 - - - a5 - - - c6 - b5 - a5 - g5 -', 'a5 - - - - - - - . . e5 - f5 - g#5 -', 'a5 - - - c6 - - - e6 - - - d6 - c6 -', 'b5 - - - g#5 - - - e5 - - - - - . .'),
+      brassLow: b4('a3+c4 - - - . . . . a3+c4 - - - . . . .', 'f3+a3 - - - . . . . e3+g#3 - - - . . . .', 'a3+c4 - - - . . . . c4+e4 - - - d4+f4 - - -', 'e3+g#3 - - - - - - - e3+b3 - - - - - - -'),
+      timpani: b4('x . . . . . . . x . . . . . . .', 'x . . . . . . . x . . . . . . .', 'x . . . . . . . x . . . . . . .', 'x . . . x . . . x . x . x x x x'),
+      march: b4('x . x . X . x . x . x . X . x .', 'x . x . X . x . x . x . X . x .', 'x . x . X . x . x . x . X . x .', 'x . x . X . x . x x x x X X X X'),
+      cymbal: 'x . . . . . . . . . . . . . . . ' + rep('. . . . . . . . . . . . . . . .', 3),
     },
   },
-  // Half-time trap boss: gliding 808, hard sparse kick, snare on 3, hat rolls, dark pad, stabs
+  // Boss / legendary: heavy timpani, low brass stabs, tremolo strings, chromatic melody (D minor)
   boss: {
-    bpm: 140,
+    bpm: 148,
     channels: {
-      pad: b4('e3+g3+b3+d4 - - - - - - - - - - - - - - -', 'c3+e3+g3+b3 - - - - - - - - - - - - - - -', 'd3+f3+a3+c4 - - - - - - - - - - - - - - -', 'b2+d3+f#3+a3 - - - - - - - - - - - - - - -'),
-      bass808: b4('e1 - - - - - . e1 - - g1 - - - - -', 'c1 - - - - - . c1 - - e1 - - - - -', 'd1 - - - - - . d1 - - f1 - - - - -', 'b0 - - - - - . b0 - - d1 - - e1 - -'),
-      supersaw: b4('e5 - - - - - - - . . . . g5 - f#5 -', 'e5 - - - - - - - . . . . c6 - b5 -', 'a5 - - - - - - - . . . . d6 - c6 -', 'b5 - - - - - - - d6 - - - e6 - - -'),
-      pluck: b4('e6 . . . . . e6 . . . e6 . . . . .', 'e6 . . . . . e6 . . . g6 . . . . .', 'f6 . . . . . f6 . . . a6 . . . . .', 'f#6 . . . . . f#6 . . . a6 . b6 . d7 .'),
-      kick: b4('x . . . . . . x . . x . . . . .', 'x . . . . . . x . . x . . . . .', 'x . . . . . . x . . x . . . . .', 'x . . . . . . x . . x . x . x x'),
-      clap: rep('. . . . . . . . x . . . . . . .', 4),
-      hat: b4('x . x . x . x . x . x . x x x x', 'x . x . x . x . x . x . x . x .', 'x . x . x . x . x x x x x . x .', 'x . x . x x x x x x x x X X X X'),
-      riser: rep('. . . . . . . . . . . . . . . .', 3) + 'x . . . . . . . . . . . . . . . ',
+      tuba: b4('d1 - d1 - d1 - d1 - d1 - d1 - c#1 - c#1 -', 'bb0 - bb0 - bb0 - bb0 - a0 - a0 - a0 - a0 -', 'd1 - d1 - d1 - d1 - f1 - f1 - f1 - f1 -', 'g1 - g1 - g#1 - g#1 - a1 - a1 - a1 a1 a1 a1'),
+      tremolo: b4('d4+f4+a4 - - - - - - - - - - - - - - -', 'bb3+d4+f4 - - - - - - - a3+c#4+e4 - - - - - - -', 'd4+f4+a4 - - - - - - - f4+a4+c5 - - - - - - -', 'g3+bb3+d4 - - - - - - - a3+c#4+e4 - - - - - - -'),
+      brassLow: b4('d3+a3 - - . d3+a3 - - . . . . . d3+a3 - - -', 'bb2+f3 - - . bb2+f3 - - . a2+e3 - - - - - - -', 'd3+a3 - - . d3+a3 - - . f3+c4 - - . f3+c4 - - .', 'g2+d3 - - - g#2+d#3 - - - a2+e3 - - - a2+e3 - - -'),
+      brass: b4('. . . . . . . . a5 - - - f5 - d5 -', 'e5 - - - - - - - c#5 - - - - - - -', 'd5 - - - f5 - - - a5 - - - c6 - - -', 'bb5 - - - a5 - - - g5 - - - e5 - - -'),
+      timpani: b4('x . . . x . . . x . . . x . x .', 'x . . . x . . . x . . . x . x .', 'x . . . x . . . x . . . x . x .', 'x . x . x . x . x x x x X X X X'),
+      march: b4('. . . . x . . . . . . . x . . .', '. . . . x . . . . . . . x . . .', '. . . . x . . . . . . . x . . .', '. . . . x . . . x x x x X X X X'),
+      cymbal: 'x . . . . . . . . . . . . . . . ' + rep('. . . . . . . . . . . . . . . .', 3),
     },
   },
-  // Tense get-chance: pulsing sub, filtered pad, heartbeat kick, ticking hats (D minor)
+  // Get chance: tense tremolo strings, timpani heartbeat, sparse glockenspiel (E minor)
   catch: {
-    bpm: 96,
+    bpm: 104,
     channels: {
-      pad: b4('d3+f3+a3+c4 - - - - - - - - - - - - - - -', 'bb2+d3+f3+a3 - - - - - - - - - - - - - - -', 'd3+f3+a3+c4 - - - - - - - - - - - - - - -', 'a2+c#3+e3+g3 - - - - - - - - - - - - - - -'),
-      sub: rep('d1 - . . d1 - . . d1 - . . d1 - . .', 2) + rep('bb0 - . . bb0 - . . a0 - . . a0 - . .', 2),
-      pluck: b4('d5 . a5 . d6 . a5 . f5 . a5 . d6 . a5 .', 'd5 . f5 . bb5 . f5 . d5 . f5 . bb5 . f5 .', 'd5 . a5 . d6 . a5 . f5 . a5 . d6 . f6 .', 'e5 . g5 . c#6 . g5 . e5 . g5 . c#6 . e6 .'),
-      kick: rep('x . . x . . . . . . . . . . . .', 4),
-      hat: rep('x . x . x . x . x . x . x . x .', 4),
+      tremolo: b4('e3+g3+b3 - - - - - - - - - - - - - - -', 'c3+e3+g3 - - - - - - - - - - - - - - -', 'e3+g3+b3 - - - - - - - - - - - - - - -', 'b2+d#3+f#3 - - - - - - - - - - - - - - -'),
+      tuba: rep('e1 - . . . . . . e1 - . . . . . .', 2) + rep('c1 - . . . . . . b0 - . . . . . .', 2),
+      glock: b4('e5 . . . b5 . . . g5 . . . . . . .', 'c5 . . . g5 . . . e5 . . . . . . .', 'e5 . . . b5 . . . g5 . . . e6 . . .', 'd#5 . . . f#5 . . . b5 . . . . . . .'),
+      timpani: rep('x . . x . . . . . . . . . . . .', 4),
+      shaker: rep('x . . . x . . . x . . . x . . .', 4),
     },
   },
-  // Calm result: lo-fi keys, soft pad, gentle beat (C major with 7ths)
+  // Victory / result: brass fanfare loop with snare rolls, then a warm string cadence (C major)
   result: {
-    bpm: 88,
+    bpm: 126,
     channels: {
-      pad: b4('c4+e4+g4+b4 - - - - - - - - - - - - - - -', 'f3+a3+c4+e4 - - - - - - - - - - - - - - -', 'a3+c4+e4+g4 - - - - - - - - - - - - - - -', 'g3+b3+d4+f4 - - - - - - - - - - - - - - -'),
-      sub: b4('c1 - - - - - - - . . . . g1 - - -', 'f1 - - - - - - - . . . . c2 - - -', 'a1 - - - - - - - . . . . e1 - - -', 'g1 - - - - - - - . . . . d1 - - -'),
-      keys: b4('g5 - - - e5 - - - c5 - - - - - - -', 'a5 - - - f5 - - - c5 - - - e5 - - -', 'e5 - - - g5 - - - a5 - - - c6 - - -', 'b5 - - - g5 - - - d5 - - - - - - -'),
-      pluck: b4('. . e5 . . . g5 . . . c6 . . . . .', '. . f5 . . . a5 . . . c6 . . . . .', '. . e5 . . . a5 . . . c6 . . . . .', '. . d5 . . . g5 . . . b5 . . . . .'),
-      kick: rep('x . . . . . . . x . . . . . . .', 4),
-      clap: rep('. . . . x . . . . . . . x . . .', 4),
-      hat: rep('. . x . . . x . . . x . . . x o', 4),
+      brass: b4('g5 - g5 - g5 - - - e5 - - - g5 - - -', 'c6 - - - - - - - . . . . . . . .', 'e5 - - - g5 - - - c6 - - - e6 - - -', 'd6 - - - c6 - - - - - - - - - - -'),
+      brassLow: b4('c4+e4 - - - c4+e4 - - - . . . . . . . .', 'c4+e4+g4 - - - - - - - . . . . . . . .', 'c4+e4 - - - . . . . a3+c4 - - - . . . .', 'g3+b3+d4 - - - c4+e4+g4 - - - - - - - - - - -'),
+      strings: b4('c4+e4+g4 - - - - - - - - - - - - - - -', 'f3+a3+c4 - - - - - - - - - - - - - - -', 'a3+c4+e4 - - - - - - - - - - - - - - -', 'g3+b3+d4 - - - - - - - c4+e4+g4 - - - - - - -'),
+      tuba: b4('c2 - - - g1 - - - c2 - - - g1 - - -', 'f1 - - - c2 - - - f1 - - - c2 - - -', 'a1 - - - e1 - - - a1 - - - e1 - - -', 'g1 - - - g1 - - - c2 - - - - - - -'),
+      march: b4('x x x x X . . . x . . . x x x x', 'X . . . . . . . x . . . x . . .', 'x . . . x . . . x . . . x x x x', 'X . . . x . . . X . . . . . . .'),
+      timpani: b4('x . . . . . . . x . . . . . . .', 'x . . . . . . . . . . . . . . .', 'x . . . . . . . x . . . . . . .', 'x . . . . . . . x . . . . . . .'),
+      cymbal: 'x . . . . . . . . . . . . . . . ' + rep('. . . . . . . . . . . . . . . .', 3),
     },
   },
 };
@@ -150,7 +146,7 @@ class Music {
     // ping-pong delay send (time set per track)
     this.delaySend = ctx.createGain(); this.delayL = ctx.createDelay(2); this.delayR = ctx.createDelay(2);
     const fb = ctx.createGain(); fb.gain.value = 0.32; const pl = ctx.createStereoPanner(); pl.pan.value = -0.7; const pr = ctx.createStereoPanner(); pr.pan.value = 0.7;
-    const dOut = ctx.createGain(); dOut.gain.value = 0.35; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
+    const dOut = ctx.createGain(); dOut.gain.value = 0.18; const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 500;
     this.delaySend.connect(this.delayL); this.delayL.connect(pl).connect(dOut); this.delayL.connect(this.delayR); this.delayR.connect(pr).connect(dOut); this.delayR.connect(fb).connect(this.delayL); dOut.connect(hp).connect(this.master);
     document.addEventListener('visibilitychange', () => { if (!this.ctx) return; const g = this.master.gain; g.cancelScheduledValues(this.ctx.currentTime); g.linearRampToValueAtTime(document.hidden ? 0 : 0.55, this.ctx.currentTime + 0.3); });
     this.ready = true;
@@ -224,12 +220,43 @@ class Music {
     const g = ctx.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(gain, t + attack); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     src.connect(f).connect(g).connect(out); src.start(t); src.stop(t + dur + 0.02);
   }
-  /** side-chain pump on every kick */
-  private pumpKick(t: number) { const g = this.pump.gain; g.cancelScheduledValues(t); g.setValueAtTime(1, t); g.linearRampToValueAtTime(0.42, t + 0.012); g.linearRampToValueAtTime(1, t + 60 / this.bpm * 0.8); }
+  /** side-chain pump (only used by the electronic voices; orchestral tracks do not pump) */
+  private pumpKick(_t: number) { /* disabled for the orchestral soundtrack */ }
 
   private trigger(v: Voice2, notes: number[], t: number, len: number, accent = false, open = false) {
     const ctx = this.ctx!; const out = this.trackGain!; const d = Math.max(0.05, len);
     switch (v) {
+      case 'brass': case 'brassLow': for (const n of notes) { // two detuned saws, filter "blat" envelope, vibrato after the onset
+        const low = v === 'brassLow'; const bus = ctx.createGain(); bus.gain.value = low ? 0.075 : 0.09;
+        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 1.5; f.frequency.setValueAtTime(400, t); f.frequency.exponentialRampToValueAtTime(low ? 1800 : 3200, t + 0.07); f.frequency.exponentialRampToValueAtTime(low ? 1200 : 2000, t + Math.max(0.2, d));
+        const g = this.env(t, d, 1, 0.03, Math.min(0.12, d * 0.3)); f.connect(g).connect(bus).connect(out); this.send(g, 0.4, 0.15);
+        [-7, 6].forEach((det, i) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(n); o.detune.value = det; const p = ctx.createStereoPanner(); p.pan.value = (i ? 0.25 : -0.25); if (!low) { const l = ctx.createOscillator(); l.frequency.value = 5.5; const lg = ctx.createGain(); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(9, t + 0.25); l.connect(lg).connect(o.detune); l.start(t); l.stop(t + d + 0.05); } o.connect(p).connect(f); o.start(t); o.stop(t + d + 0.05); });
+      } break;
+      case 'strings': case 'tremolo': for (const n of notes) { // 4 detuned saws, slow bow attack, chorus width; tremolo variant shakes the amplitude
+        const bus = ctx.createGain(); bus.gain.value = 0.028;
+        const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 0.7; f.frequency.value = 2600;
+        const g = this.env(t, d, 1, v === 'tremolo' ? 0.05 : Math.min(0.25, d * 0.25), Math.min(0.3, d * 0.3)); f.connect(g).connect(bus).connect(out); this.send(g, 0.55);
+        if (v === 'tremolo') { const l = ctx.createOscillator(); l.frequency.value = 11; const lg = ctx.createGain(); lg.gain.value = 0.45; l.connect(lg).connect(g.gain); l.start(t); l.stop(t + d + 0.05); }
+        [-11, -4, 4, 11].forEach((det, i) => { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(n); o.detune.value = det; const p = ctx.createStereoPanner(); p.pan.value = (i / 3) * 1.2 - 0.6; o.connect(p).connect(f); o.start(t); o.stop(t + d + 0.1); });
+      } break;
+      case 'flute': for (const n of notes) { // breathy sine with vibrato
+        const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = hz(n); const o2 = ctx.createOscillator(); o2.type = 'triangle'; o2.frequency.value = hz(n); const g2 = ctx.createGain(); g2.gain.value = 0.25;
+        const l = ctx.createOscillator(); l.frequency.value = 5; const lg = ctx.createGain(); lg.gain.setValueAtTime(0, t); lg.gain.linearRampToValueAtTime(7, t + 0.2); l.connect(lg).connect(o.detune); l.connect(lg).connect(o2.detune);
+        const g = this.env(t, d, 0.11, 0.045, Math.min(0.15, d * 0.3)); o.connect(g); o2.connect(g2).connect(g); g.connect(out); this.send(g, 0.5, 0.1);
+        this.noise(t, Math.min(0.12, d), 0.03, out, { type: 'bandpass', freq: hz(n) * 2, q: 3 }, 0.02);
+        o.start(t); o2.start(t); l.start(t); o.stop(t + d + 0.05); o2.stop(t + d + 0.05); l.stop(t + d + 0.05);
+      } break;
+      case 'piano': for (const n of notes) { // bright hammered tone: fundamental + decaying upper partials
+        const g = this.env(t, Math.max(0.25, d), 0.11, 0.003, Math.min(0.25, d * 0.5)); g.connect(out); this.send(g, 0.35);
+        [[1, 1, 'triangle'], [2, 0.4, 'sine'], [3, 0.15, 'sine']].forEach(([r, a, type]) => { const o = ctx.createOscillator(); o.type = type as OscillatorType; o.frequency.value = hz(n) * (r as number); const pg = ctx.createGain(); pg.gain.setValueAtTime(a as number, t); pg.gain.exponentialRampToValueAtTime(0.001, t + 0.9 / (r as number)); o.connect(pg).connect(g); o.start(t); o.stop(t + d + 0.1); });
+      } break;
+      case 'pizz': for (const n of notes) { const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = hz(n); const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(2500, t); f.frequency.exponentialRampToValueAtTime(300, t + 0.15); const g = this.env(t, 0.22, 0.28, 0.003, 0.15); o.connect(f).connect(g).connect(out); this.send(g, 0.3); o.start(t); o.stop(t + 0.3); } break;
+      case 'tuba': for (const n of notes) { const o = ctx.createOscillator(); o.type = 'sawtooth'; o.frequency.value = hz(n); const o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = hz(n); const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(350, t); f.frequency.exponentialRampToValueAtTime(900, t + 0.04); f.frequency.exponentialRampToValueAtTime(400, t + Math.max(0.15, d)); const g = this.env(t, Math.max(0.12, d * 0.85), 0.32, 0.015, 0.05); const g2 = this.env(t, Math.max(0.12, d * 0.85), 0.35, 0.01, 0.05); o.connect(f).connect(g).connect(this.master); o2.connect(g2).connect(this.master); o.start(t); o2.start(t); o.stop(t + d + 0.1); o2.stop(t + d + 0.1); } break;
+      case 'timpani': { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.setValueAtTime(130, t); o.frequency.exponentialRampToValueAtTime(72, t + 0.12); const g = this.env(t, accent ? 0.7 : 0.55, accent ? 0.8 : 0.6, 0.004, 0.4); o.connect(g).connect(this.master); o.start(t); o.stop(t + 0.8); this.noise(t, 0.05, 0.25, out, { type: 'lowpass', freq: 900 }); const rv = ctx.createGain(); rv.gain.value = 0.5; this.noise(t, 0.3, 0.2, rv, { type: 'lowpass', freq: 400 }); rv.connect(this.reverbSend); break; }
+      case 'march': { this.noise(t, accent ? 0.16 : 0.1, accent ? 0.34 : 0.22, out, { type: 'bandpass', freq: 1900, q: 0.7 }); this.noise(t, 0.05, 0.12, out, { type: 'highpass', freq: 4000 }); const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.setValueAtTime(230, t); o.frequency.exponentialRampToValueAtTime(150, t + 0.08); const g = this.env(t, 0.09, 0.14); o.connect(g).connect(out); o.start(t); o.stop(t + 0.15); break; }
+      case 'cymbal': { this.noise(t, 1.8, 0.16, out, { type: 'highpass', freq: 5000 }); const rv = ctx.createGain(); rv.gain.value = 0.7; this.noise(t, 1.2, 0.12, rv, { type: 'highpass', freq: 4000 }); rv.connect(this.reverbSend); break; }
+      case 'shaker': { this.noise(t, accent ? 0.08 : 0.05, accent ? 0.11 : 0.07, out, { type: 'bandpass', freq: 8000, q: 1.2 }, 0.01); break; }
+      case 'glock': for (const n of notes) { const g = this.env(t, 0.9, 0.09, 0.002, 0.7); g.connect(out); this.send(g, 0.7, 0.2); [[1, 1], [2.76, 0.35], [5.4, 0.12]].forEach(([r, a]) => { const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = hz(n) * 2 * r; const pg = ctx.createGain(); pg.gain.setValueAtTime(a, t); pg.gain.exponentialRampToValueAtTime(0.001, t + 0.9 / r); o.connect(pg).connect(g); o.start(t); o.stop(t + 1); }); } break;
       case 'supersaw': for (const n of notes) { // 6 detuned saws spread in stereo, opening lowpass
         const bus = ctx.createGain(); bus.gain.value = 0.035;
         const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.Q.value = 0.8; f.frequency.setValueAtTime(900, t); f.frequency.exponentialRampToValueAtTime(5200, t + Math.min(0.5, d * 0.5)); f.frequency.exponentialRampToValueAtTime(1800, t + d);

@@ -87,6 +87,8 @@ jobs:
         env:
           VITE_BASE: ${{ needs.setup.outputs.base }}
           VITE_WS_URL: ${{ needs.setup.outputs.ws_url }}
+          VITE_TTS_URL: ${{ vars.PUBLIC_TTS_URL }}
+          VITE_TTS_SPEAKER: ${{ vars.PUBLIC_TTS_SPEAKER }}
         run: |
           npm run build -w client
           cp client/dist/index.html client/dist/404.html   # SPA fallback
