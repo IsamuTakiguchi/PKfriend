@@ -307,3 +307,16 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .throw-ball { touch-action: none; cursor: grab; padding: 14px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.25), transparent 70%); transition: transform .08s; will-change: transform; }
 .throw-ball:active { cursor: grabbing; }
 .throw-ball.flying { transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .4s; opacity: 0; }
+
+/* ------------------------------------------------ illustrated scenes */
+.scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+@keyframes drift { from { transform: translateX(0); } to { transform: translateX(-520px); } }
+@keyframes sway { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+@keyframes wave { from { transform: translateX(0); } to { transform: translateX(160px); } }
+@keyframes foam { from { transform: translateY(0); opacity: .45; } to { transform: translateY(10px); opacity: .25; } }
+@keyframes pulse { 0%, 100% { opacity: .75; } 50% { opacity: 1; } }
+@keyframes twinkle { from { opacity: .2; } to { opacity: 1; } }
+@keyframes flicker { 0%, 100% { opacity: 0; } 50% { opacity: 1; } }
+@keyframes rise { from { transform: translateY(0); opacity: .8; } to { transform: translateY(-320px); opacity: 0; } }
+@keyframes float { 0%, 100% { transform: translate(195px, 520px) translateY(0); } 50% { transform: translate(195px, 520px) translateY(-14px); } }
+@keyframes sweep { from { transform: rotate(-8deg); transform-origin: 50% 0; } to { transform: rotate(8deg); transform-origin: 50% 0; } }

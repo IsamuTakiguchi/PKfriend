@@ -11,6 +11,7 @@ import { sfx } from '../audio';
 import { toast } from '../toast';
 import { useBgm } from '../music';
 import { useUi } from '../ui';
+import { say, lines } from '../voice';
 
 const EMOTES = ['👍', '🔥', '😱', '💪', '🙏', '🎉'];
 const BG = 'linear-gradient(180deg,#1a0b2e 0%,#4a1942 50%,#c31432 100%)';
@@ -44,7 +45,7 @@ export function RaidRoom() {
       started.current = true;
       api.setBattlers(room.state.allies, room.state.foes);
       if (room.boss) api.solo(room.boss.uid, { enter: true, callout: 'あらわれた！', nameplate: { text: room.boss.name, sub: `ボス Lv.${room.boss.level}` } });
-      sfx.encounter(); void api.banner(`ボス ${room.boss?.name}が あらわれた！`, 'big', 1500);
+      sfx.encounter(); if (room.boss) say(lines.bossAppear(room.boss.name), { priority: true }); void api.banner(`ボス ${room.boss?.name}が あらわれた！`, 'big', 1500);
       bump('raids');
       for (const m of room.members) if (m.player.id !== player.id) addFriend({ id: m.player.id, name: m.player.name, avatarSpeciesId: m.player.avatarSpeciesId, via: 'raid' });
     }
@@ -106,8 +107,8 @@ export function RaidRoom() {
 
   return (
     <div className="screen full">
-      <BattleStage api={api} bg={BG} myOwnerId={player.id} pendingUids={room.pendingUids} emotes={emotes}>
-        <div style={{ position: 'absolute', top: 70, left: 8, right: 8, display: 'flex', justifyContent: 'space-between', zIndex: 9, pointerEvents: 'none' }}>
+      <BattleStage api={api} bg={BG} scene="arena" myOwnerId={player.id} pendingUids={room.pendingUids} emotes={emotes}>
+        <div style={{ position: 'absolute', top: 140, left: 8, right: 8, display: 'flex', justifyContent: 'space-between', zIndex: 9, pointerEvents: 'none' }}>
           <span className="badge">コード {room.code}</span><span className="badge">{room.members.length}にん さんか</span>
           <button className="btn sm" style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,.5)' }} onClick={() => setLeaveAsk(true)}>でる</button>
         </div>

@@ -3,10 +3,11 @@ import { SPECIES, levelFromExp, displayName, getSpecies, movesFor } from '@pkfri
 import { useStore, useLead } from '../store';
 import { Sprite, Modal, ExpBar, Types } from '../components/ui';
 import { useNet } from '../net';
+import { say, voiceInfo } from '../voice';
 
 export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void }) {
   const player = useStore(s => s.player)!; const box = useStore(s => s.box); const caught = useStore(s => s.caught); const seen = useStore(s => s.seen);
-  const stats = useStore(s => s.stats); const sound = useStore(s => s.sound); const toggleSound = useStore(s => s.toggleSound); const bgm = useStore(s => s.bgm); const toggleBgm = useStore(s => s.toggleBgm); const setPlayer = useStore(s => s.setPlayer); const resetAll = useStore(s => s.resetAll); const updatePokemon = useStore(s => s.updatePokemon);
+  const stats = useStore(s => s.stats); const sound = useStore(s => s.sound); const toggleSound = useStore(s => s.toggleSound); const bgm = useStore(s => s.bgm); const toggleBgm = useStore(s => s.toggleBgm); const voice = useStore(s => s.voice); const toggleVoice = useStore(s => s.toggleVoice); const setPlayer = useStore(s => s.setPlayer); const resetAll = useStore(s => s.resetAll); const updatePokemon = useStore(s => s.updatePokemon);
   const starter = box.find(p => p.origin === 'starter');
   const [changeStarter, setChangeStarter] = useState(false);
   const status = useNet(s => s.status);
@@ -37,6 +38,8 @@ export function Home({ go }: { go: (tab: 'explore' | 'box' | 'friends') => void 
       <div className="card stack" style={{ gap: 8 }}>
         <div className="row between"><span>🎵 BGM</span><button className={`btn sm ${bgm ? 'gold' : ''}`} onClick={toggleBgm}>{bgm ? 'ON' : 'OFF'}</button></div>
         <div className="row between"><span>🔊 こうかおん</span><button className={`btn sm ${sound ? 'gold' : ''}`} onClick={toggleSound}>{sound ? 'ON' : 'OFF'}</button></div>
+        <div className="row between"><span>🎙️ じっきょう（おとこの こえ）</span><div className="row" style={{ gap: 6 }}><button className="btn sm" onClick={() => say('ようこそ、PKフレンドへ！ きょうも ポケモンを ゲットしよう！', { priority: true })}>テスト</button><button className={`btn sm ${voice ? 'gold' : ''}`} onClick={toggleVoice}>{voice ? 'ON' : 'OFF'}</button></div></div>
+        <div className="small muted">{voiceInfo().available ? `つかう こえ: ${voiceInfo().name}${voiceInfo().male ? '' : '（この端末に 男性ボイスが ないため、ひくい声に 調整しています）'}` : 'この端末には 日本語の 音声合成が ありません（端末の 設定で 日本語音声を 追加すると 実況が 流れます）'}</div>
       </div>
       <p className="small muted center">みたポケモン {seen.length}しゅるい ／ ID: {player.id}</p>
       <button className="btn ghost sm" style={{ color: 'var(--muted)' }} onClick={() => setConfirmReset(true)}>データを リセットする</button>

@@ -15,6 +15,7 @@ import { sfx, unlockAudio } from '../audio';
 import { toast } from '../toast';
 import { useBgm } from '../music';
 import { useImmersive } from '../ui';
+import { say, lines } from '../voice';
 
 type Mode = 'menu' | 'areas' | 'prep' | 'battle' | 'now-areas' | 'now';
 
@@ -147,6 +148,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
 
   /** cinematic intro: each opponent appears alone on screen */
   async function introduce(list: Battler[], sub: string) {
+    say(lines.wildAppear(list.map(w => w.name)), { priority: true });
     for (const w of list) { sfx.encounter(); api.solo(w.uid, { enter: true, callout: 'あらわれた！', nameplate: { text: `やせいの ${w.name}`, sub: `${sub} Lv.${w.level}` } }); await sleep(1300); }
   }
   const aliveAllies = () => state.current?.allies.filter(a => !a.fainted) ?? [];
@@ -159,7 +161,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     setPhase('resolving');
     // あいては じどうで 前に出てくる
     const nw = foes[Math.floor(rng.current() * foes.length)]; setNextWild(nw); setTargetUid(nw.uid);
-    sfx.lunge();
+    sfx.lunge(); say(lines.stepForward(nw.name), { priority: true });
     api.solo(nw.uid, { enter: true, callout: `${nw.name}、前へ！`, nameplate: { text: nw.name, sub: isTrainerBattle && trainer ? trainerLabel(trainer) : 'やせいの ポケモン' } });
     await sleep(1500);
     api.setLog(`あいての ${nw.name}が 前に出てきた！ こちらは だれを 出す？`);
@@ -170,7 +172,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
   function chooseAttacker(uid: string, silent = false) {
     setAttackerUid(uid);
     const a = state.current?.allies.find(x => x.uid === uid);
-    if (!silent) sfx.select();
+    if (!silent) { sfx.select(); if (a) say(lines.yourPick(a.name), { priority: true }); }
     api.solo(uid, { enter: true, callout: silent ? undefined : '前へ！', nameplate: a ? { text: a.name, sub: `${player.name}の ポケモン` } : null });
   }
 
@@ -180,7 +182,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     const foes = trainer.speciesIds.map(id => { const b = wildBattler(getSpecies(id), trainer.level, rng.current); b.ownerName = trainerLabel(trainer); b.ownerId = 'trainer'; markSeen(id); return b; });
     state.current.foes = foes; setIsTrainerBattle(true);
     api.setBattlers(state.current.allies, foes);
-    sfx.cutin(); await api.banner(`${trainerLabel(trainer)}が しょうぶを しかけてきた！`, 'big', 1600);
+    sfx.cutin(); say(lines.trainer(trainerLabel(trainer)), { priority: true }); await api.banner(`${trainerLabel(trainer)}が しょうぶを しかけてきた！`, 'big', 1600);
     for (const f of foes) { sfx.encounter(); api.solo(f.uid, { enter: true, callout: 'いけっ！', nameplate: { text: f.name, sub: `${trainerLabel(trainer)} Lv.${f.level}` } }); await sleep(1100); }
     startTurn();
   }
@@ -233,7 +235,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
       const f = newlyDown[0]; const last = aliveFoes().length === 0;
       setIsLast(last); setGetTarget(f);
       api.solo(f.uid, { nameplate: { text: f.name, sub: 'よわっている！' } }); api.setClass(f.uid, 'popout');
-      sfx.encounter(); await api.banner(last ? 'ラストゲットタイム！' : 'ゲットタイム！', 'big', 1300);
+      sfx.encounter(); say(lines.getTime(last), { priority: true }); await api.banner(last ? 'ラストゲットタイム！' : 'ゲットタイム！', 'big', 1300);
       setPhase('getTime'); return;
     }
     if (!aliveFoes().length) { await finishBattle(); return; }
@@ -254,12 +256,12 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
   }
   async function afterThrow(success: boolean) {
     const t = getTarget!;
-    if (!success) await api.banner(`${t.name}は にげてしまった…`, '', 1000);
+    if (!success) { say(lines.escaped(t.name), { priority: true }); await api.banner(`${t.name}は にげてしまった…`, '', 1000); } else say(lines.caught(t.name), { priority: true });
     api.setClass(t.uid, 'gone'); setGetTarget(null); setBall(null); await sleep(300);
     if (success && isLast && rng.current() < 0.35 && justCaughtRef.current) { // こうかんチャンス
       const give = justCaughtRef.current; const offerId = exchangeOffer(give.speciesId, t.level, rng.current); markSeen(offerId);
       const offer = createOwned({ speciesId: offerId, level: exchangeLevel(t.level), rng: rng.current, ownerId: 'senior', ownerName: 'せんぱいトレーナー', origin: 'exchange' });
-      sfx.cutin(); await api.banner('こうかんチャンス！', 'gold', 1200);
+      sfx.cutin(); say(lines.exchange(), { priority: true }); await api.banner('こうかんチャンス！', 'gold', 1200);
       setExchange({ give, offer }); setPhase('exchange'); return;
     }
     if (!aliveFoes().length || isTrainerBattle) { await finishBattle(); return; }
@@ -283,7 +285,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
       const bonus = wildBattler(getSpecies(sid), wildLevel() + 2, rng.current, { shiny: rng.current() < SHINY_RATE * 2 }); bonus.hp = Math.floor(bonus.maxHp * 0.3);
       state.current.foes = [bonus]; api.setBattlers(state.current.allies, [bonus]); api.solo(bonus.uid, { enter: true, nameplate: { text: bonus.name, sub: 'ボーナス！ よわっている' } });
       setIsTrainerBattle(false); setIsLast(true); setGetTarget(bonus);
-      await api.banner('ボーナスゲットタイム！', 'big', 1400);
+      say(lines.bonus(), { priority: true }); await api.banner('ボーナスゲットタイム！', 'big', 1400);
       setPhase('bonus'); return;
     }
     if (defeated.current.length) bump('wins');
@@ -302,16 +304,16 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
       if (to > from) { ups.push({ uid, from, to }); const el = evolveLevel(p.speciesId); if (el && to >= el && !evoCandidate) evoCandidate = { p: { ...p, exp }, to: pick(rng.current, evolutionsOf(p.speciesId)) }; }
     }
     if (gain > 0) await api.banner(`${gain} けいけんちを もらった！`, '', 900);
-    for (const u of ups) { const p = useStore.getState().box.find(x => x.uid === u.uid); sfx.levelUp(); api.setClass(u.uid, 'levelup', 1000); await api.banner(`${p ? displayName(p) : ''}は Lv.${u.to}に あがった！`, 'gold', 1100); }
+    for (const u of ups) { const p = useStore.getState().box.find(x => x.uid === u.uid); sfx.levelUp(); if (p) say(lines.levelUp(displayName(p), u.to), { priority: true }); api.setClass(u.uid, 'levelup', 1000); await api.banner(`${p ? displayName(p) : ''}は Lv.${u.to}に あがった！`, 'gold', 1100); }
     setLevelUps(ups); if (evoCandidate) setEvo(evoCandidate);
   }
-  function doEvolve() { if (!evo) return; setEvolving(true); sfx.evolve(); setTimeout(() => { const s = getSpecies(evo.to); updatePokemon(evo.p.uid, { speciesId: evo.to, moves: movesFor(s.id, s.types, levelFromExp(evo.p.exp)) }); toast(`おめでとう！ ${displayName(evo.p)}は ${s.ja}に しんかした！`, 'ok'); setEvoDone(true); }, 2500); }
+  function doEvolve() { if (!evo) return; setEvolving(true); sfx.evolve(); say('おや…？ ようすが…！', { priority: true }); setTimeout(() => { const s = getSpecies(evo.to); say(lines.evolve(displayName(evo.p), s.ja), { priority: true }); updatePokemon(evo.p.uid, { speciesId: evo.to, moves: movesFor(s.id, s.types, levelFromExp(evo.p.exp)) }); toast(`おめでとう！ ${displayName(evo.p)}は ${s.ja}に しんかした！`, 'ok'); setEvoDone(true); }, 2500); }
 
   const canChoose = phase === 'choose' && !busy;
   const eff = attacker && target ? typeMultiplier(getMove(attacker.moves[0]).type, getSpecies(target.speciesId).types) : 1;
   return (
     <div className="screen full">
-      <BattleStage api={api} bg={area.bg} myOwnerId={player.id} select={{ targetUid, attackerUid, tiredUids: tiredUid ? [tiredUid] : [], onSelectAlly: canChoose ? uid => chooseAttacker(uid) : undefined }}>
+      <BattleStage api={api} bg={area.bg} scene={area.id} myOwnerId={player.id} select={{ targetUid, attackerUid, tiredUids: tiredUid ? [tiredUid] : [], onSelectAlly: canChoose ? uid => chooseAttacker(uid) : undefined }}>
         {phase === 'special' && attacker && <SpecialChance kind={team.find(p => p.uid === attacker.uid)!.mark!} onDone={onSpecial} />}
         {phase === 'mash' && <MashChance onDone={onMash} />}
         {phase === 'roulette' && <AttackRoulette tired={attackerUid === tiredUid} powered={!!pending.current?.special} onDone={onRoulette} />}
@@ -397,7 +399,7 @@ function NowGet({ area, onExit }: { area: Area; onExit: () => void }) {
   useBgm('catch'); useImmersive();
   const leadLv = levelFromExp(party[0].exp);
   async function throwSnack() {
-    sfx.throwBall(); setStep('pickGrass');
+    sfx.throwBall(); say(lines.nowGet(), { priority: true }); setStep('pickGrass');
     const r = rng.current; const re: Reaction[] = [0, 1, 2].map(() => { const x = r(); return x < 0.25 ? '!?' : x < 0.65 ? '?' : null; });
     await api.banner('くさむらに おかしを なげた！', 'info', 900);
     setReactions(re); sfx.encounter();
@@ -409,14 +411,14 @@ function NowGet({ area, onExit }: { area: Area; onExit: () => void }) {
     const sid = pick(r, ids.length ? ids : pool); markSeen(sid);
     const lvl = Math.max(area.minLevel, Math.min(area.maxLevel, leadLv + randInt(r, -2, 2)));
     const b = wildBattler(getSpecies(sid), lvl, r, { shiny: r() < SHINY_RATE * (re === '!?' ? 3 : 1) }); b.hp = Math.floor(b.maxHp * (re === '!?' ? 0.5 : 0.7));
-    setTarget(b); api.setBattlers([], [b]); api.solo(b.uid, { enter: true, callout: 'とびだした！', nameplate: { text: b.name, sub: re === '!?' ? 'レアな はんのう！' : 'やせいの ポケモン' } }); setStep('ballRoulette'); sfx.encounter();
+    setTarget(b); say(lines.reaction(re === '!?'), { priority: true }); api.setBattlers([], [b]); api.solo(b.uid, { enter: true, callout: 'とびだした！', nameplate: { text: b.name, sub: re === '!?' ? 'レアな はんのう！' : 'やせいの ポケモン' } }); setStep('ballRoulette'); sfx.encounter();
   }
   async function resolveThrow() { const r = rollCatchBall(target!, ball!, rng.current); if (r.success) { const p = createOwned({ speciesId: target!.speciesId, level: target!.level, rng: rng.current, ownerId: player.id, ownerName: player.name, origin: 'wild', shiny: target!.shiny }); addPokemon(p); bump('catches'); setGot(p); setCaughtList(c => [...c, p]); } return r; }
   async function afterThrow(ok: boolean) { if (!ok) await api.banner(`${target!.name}は にげてしまった…`, '', 900); setStep('done'); }
   function again() { setGot(null); setTarget(null); setBall(null); api.solo(null); api.setBattlers([], []); setReactions([null, null, null]); setStep('snack'); }
   return (
     <div className="screen full">
-      <BattleStage api={api} bg={area.bg}>
+      <BattleStage api={api} bg={area.bg} scene={area.id}>
         {(step === 'snack' || step === 'pickGrass') && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-around', zIndex: 9 }}>
             {[0, 1, 2].map(i => <button key={i} className="btn" style={{ background: 'transparent', flexDirection: 'column', fontSize: 64, position: 'relative' }} disabled={step !== 'pickGrass'} onClick={() => pickGrass(i)}>
