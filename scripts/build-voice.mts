@@ -1,39 +1,57 @@
 // Synthesize every commentary line with a VOICEVOX-compatible engine and write a static voice bank
 // (client/public/voice/<hash>.mp3 + manifest.json). Usage:
-//   npx tsx scripts/build-voice.mts --engine http://127.0.0.1:50021 --speaker 11 [--out client/public/voice] [--format mp3|wav] [--limit N]
+//   npx tsx scripts/build-voice.mts --engine http://127.0.0.1:50021 --speaker-name 青山龍星 [--speaker 13] [--out client/public/voice] [--format mp3|wav] [--limit N]
 import { createHash } from 'node:crypto';
 import { mkdirSync, existsSync, writeFileSync, readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
-import { allLines } from '../shared/src/index.js';
+import { allLines, moodOf, type Mood } from '../shared/src/index.js';
 
 const arg = (k: string, d: string) => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : d; };
 const ENGINE = arg('engine', 'http://127.0.0.1:50021').replace(/\/$/, '');
-const SPEAKER = Number(arg('speaker', '11'));
+const SPEAKER_NAME = arg('speaker-name', '青山龍星');
+const SPEAKER = Number(arg('speaker', '13')); // fallback style id when the name cannot be resolved
 const OUT = arg('out', 'client/public/voice');
 const FORMAT = arg('format', 'mp3');
 const LIMIT = Number(arg('limit', '0'));
 const CONC = Number(arg('concurrency', '3'));
 mkdirSync(OUT, { recursive: true });
 
-const id = (text: string) => createHash('sha1').update(`${SPEAKER}\n${text}`).digest('hex').slice(0, 14);
+const id = (text: string) => createHash('sha1').update(`${SPEAKER_NAME}:${SPEAKER}\n${moodOf(text)}\n${text}`).digest('hex').slice(0, 14);
 let lines = allLines(); if (LIMIT) lines = lines.slice(0, LIMIT);
 const manifestPath = path.join(OUT, 'manifest.json');
-const manifest: { speaker: number; format: string; credit: string; files: Record<string, string> } = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { speaker: SPEAKER, format: FORMAT, credit: '', files: {} };
-manifest.speaker = SPEAKER; manifest.format = FORMAT;
+const manifest: { speaker: number | string; format: string; credit: string; files: Record<string, string> } = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : { speaker: SPEAKER_NAME, format: FORMAT, credit: '', files: {} };
+manifest.speaker = SPEAKER_NAME; manifest.format = FORMAT;
 
 async function fetchRetry(url: string, init: RequestInit, tries = 4): Promise<Response> {
   for (let i = 0; ; i++) { try { const r = await fetch(url, init); if (r.ok) return r; if (i >= tries - 1) throw new Error(`${r.status} ${url}`); } catch (e) { if (i >= tries - 1) throw e; } await new Promise(r => setTimeout(r, 800 * (i + 1))); }
 }
-async function speakerName(): Promise<string> {
-  try { const r = await fetch(`${ENGINE}/speakers`); const list = await r.json() as { name: string; styles: { id: number; name: string }[] }[]; for (const sp of list) for (const st of sp.styles) if (st.id === SPEAKER) return `${sp.name}（${st.name}）`; } catch { /* ignore */ }
-  return `speaker ${SPEAKER}`;
+// style names per mood for the chosen speaker (resolved against /speakers; falls back to the numeric speaker id)
+const STYLE_FOR: Record<Mood, string[]> = { hot: ['熱血', 'ツンギレ', 'ノーマル'], joy: ['喜び', 'ノーマル'], sad: ['かなしみ', '悲しみ', 'しっとり', 'ノーマル'], normal: ['ノーマル'] };
+// expression settings per mood: more pitch movement for the excited lines, calmer delivery for guidance and sad lines
+const PARAMS: Record<Mood, { speedScale: number; intonationScale: number; pitchScale: number; volumeScale: number }> = {
+  hot: { speedScale: 1.14, intonationScale: 1.75, pitchScale: 0.02, volumeScale: 1.1 },
+  joy: { speedScale: 1.1, intonationScale: 1.65, pitchScale: 0.03, volumeScale: 1.1 },
+  sad: { speedScale: 0.97, intonationScale: 1.3, pitchScale: -0.02, volumeScale: 1.0 },
+  normal: { speedScale: 1.06, intonationScale: 1.45, pitchScale: 0, volumeScale: 1.0 },
+};
+let styleIds: Record<Mood, number> = { hot: SPEAKER, joy: SPEAKER, sad: SPEAKER, normal: SPEAKER };
+let creditName = SPEAKER_NAME;
+async function resolveSpeaker() {
+  try {
+    const r = await fetch(`${ENGINE}/speakers`); const list = await r.json() as { name: string; styles: { id: number; name: string }[] }[];
+    const sp = list.find(x => x.name === SPEAKER_NAME) ?? list.find(x => x.styles.some(st => st.id === SPEAKER));
+    if (!sp) return; creditName = sp.name;
+    for (const mood of Object.keys(STYLE_FOR) as Mood[]) { const st = STYLE_FOR[mood].map(n => sp.styles.find(x => x.name === n)).find(Boolean) ?? sp.styles[0]; styleIds[mood] = st.id; }
+    console.log('speaker:', sp.name, 'styles:', Object.entries(styleIds).map(([m, i]) => `${m}=${sp.styles.find(x => x.id === i)?.name}(${i})`).join(' '));
+  } catch (e) { console.warn('could not resolve speaker styles, using id', SPEAKER, String(e).slice(0, 80)); }
 }
 async function synth(text: string): Promise<Buffer> {
-  const q = await fetchRetry(`${ENGINE}/audio_query?speaker=${SPEAKER}&text=${encodeURIComponent(text)}`, { method: 'POST' });
+  const mood = moodOf(text); const sid = styleIds[mood]; const prm = PARAMS[mood];
+  const q = await fetchRetry(`${ENGINE}/audio_query?speaker=${sid}&text=${encodeURIComponent(text)}`, { method: 'POST' });
   const query = await q.json() as Record<string, unknown>;
-  query.speedScale = 1.08; query.intonationScale = 1.2; query.volumeScale = 1.0; query.prePhonemeLength = 0.05; query.postPhonemeLength = 0.1; query.outputSamplingRate = 24000;
-  const r = await fetchRetry(`${ENGINE}/synthesis?speaker=${SPEAKER}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query) });
+  Object.assign(query, prm, { prePhonemeLength: 0.04, postPhonemeLength: 0.12, outputSamplingRate: 24000 });
+  const r = await fetchRetry(`${ENGINE}/synthesis?speaker=${sid}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query) });
   return Buffer.from(await r.arrayBuffer());
 }
 
@@ -42,8 +60,8 @@ if (FORMAT === 'mp3') { try { execFileSync('ffmpeg', ['-version'], { stdio: 'ign
 // reuse files that already exist on disk (e.g. from a previous partial run) even if the manifest lost them
 for (const t of lines) { if (manifest.files[t] && existsSync(path.join(OUT, manifest.files[t]))) continue; const base = id(t); if (existsSync(path.join(OUT, `${base}.${FORMAT}`))) manifest.files[t] = `${base}.${FORMAT}`; }
 const todo = lines.filter(t => !(manifest.files[t] && existsSync(path.join(OUT, manifest.files[t]))));
-console.log(`voice bank: ${lines.length} lines, ${todo.length} to synthesize (engine ${ENGINE}, speaker ${SPEAKER}, ${FORMAT})`);
-const name = await speakerName(); manifest.credit = `VOICEVOX:${name.replace(/（.*$/, '')}`;
+console.log(`voice bank: ${lines.length} lines, ${todo.length} to synthesize (engine ${ENGINE}, speaker ${SPEAKER_NAME}, ${FORMAT})`);
+await resolveSpeaker(); manifest.credit = `VOICEVOX:${creditName}`;
 let done = 0, failed = 0; const t0 = Date.now();
 async function worker() {
   for (;;) {

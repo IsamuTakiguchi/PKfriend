@@ -6,7 +6,7 @@ import { music } from './music';
 
 const env = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {};
 const TTS_URL = (env.VITE_TTS_URL ?? '').replace(/\/$/, '');
-const TTS_SPEAKER = Number(env.VITE_TTS_SPEAKER ?? 11); // VOICEVOX: 11 = 玄野武宏 (male), 13 = 青山龍星 (male)
+const TTS_SPEAKER = Number(env.VITE_TTS_SPEAKER ?? 81); // VOICEVOX: 81 = 青山龍星（熱血）, 13 = 青山龍星（ノーマル）, 11 = 玄野武宏
 
 // ---------------------------------------------------------------- Web Speech voice choice
 let voices: SpeechSynthesisVoice[] = [];

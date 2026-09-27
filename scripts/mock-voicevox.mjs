@@ -5,7 +5,7 @@ function wav(seconds = 0.4, freq = 220) { const sr = 24000, n = Math.floor(sr * 
 http.createServer((req, res) => {
   const u = new URL(req.url, 'http://x');
   if (u.pathname === '/version') { res.end('"mock"'); return; }
-  if (u.pathname === '/speakers') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify([{ name: '玄野武宏', styles: [{ id: 11, name: 'ノーマル' }] }])); return; }
+  if (u.pathname === '/speakers') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify([{ name: '玄野武宏', styles: [{ id: 11, name: 'ノーマル' }, { id: 39, name: '喜び' }, { id: 40, name: 'ツンギレ' }, { id: 41, name: '悲しみ' }] }, { name: '青山龍星', styles: [{ id: 13, name: 'ノーマル' }, { id: 81, name: '熱血' }, { id: 82, name: '不機嫌' }, { id: 83, name: '喜び' }, { id: 84, name: 'しっとり' }, { id: 85, name: 'かなしみ' }, { id: 86, name: '囁き' }] }])); return; }
   if (u.pathname === '/audio_query') { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ accent_phrases: [], speedScale: 1 })); return; }
   if (u.pathname === '/synthesis') { let body = ''; req.on('data', c => body += c); req.on('end', () => { res.setHeader('Content-Type', 'audio/wav'); res.end(wav(0.3 + Math.random() * 0.4)); }); return; }
   res.statusCode = 404; res.end();

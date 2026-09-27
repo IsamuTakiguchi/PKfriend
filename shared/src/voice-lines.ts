@@ -66,3 +66,12 @@ export function allLines(): string[] {
   for (const t of TRAINER_TITLES) for (const n of TRAINER_NAMES) out.add(L.trainer(`${t}の ${n}`));
   return [...out];
 }
+
+/** Delivery mood for a line: picks the VOICEVOX style (熱血 / 喜び / かなしみ / ノーマル) and the intonation settings. */
+export type Mood = 'hot' | 'joy' | 'sad' | 'normal';
+export function moodOf(text: string): Mood {
+  if (/逃げられた|全滅|疲れていて/.test(text)) return 'sad';
+  if (/ゲットだ|おめでとう|お見事|最高の数字|レベルアップ|進化した/.test(text)) return 'joy';
+  if (/ようこそ|お菓子|何かいるぞ|^[1-6]。$|ボールだ！$|様子が/.test(text)) return 'normal';
+  return 'hot';
+}
