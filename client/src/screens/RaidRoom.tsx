@@ -108,7 +108,7 @@ export function RaidRoom() {
   return (
     <div className="screen full">
       <BattleStage api={api} bg={BG} scene="arena" myOwnerId={player.id} pendingUids={room.pendingUids} emotes={emotes}>
-        <div style={{ position: 'absolute', top: 140, left: 8, right: 8, display: 'flex', justifyContent: 'space-between', zIndex: 9, pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', top: 'calc(140px + var(--safe-t))', left: 8, right: 8, display: 'flex', justifyContent: 'space-between', zIndex: 9, pointerEvents: 'none' }}>
           <span className="badge">コード {room.code}</span><span className="badge">{room.members.length}にん さんか</span>
           <button className="btn sm" style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,.5)' }} onClick={() => setLeaveAsk(true)}>でる</button>
         </div>

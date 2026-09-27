@@ -234,8 +234,8 @@ export function BattleStage({ api, bg, scene, myOwnerId, pendingUids = [], emote
   const focusPos = v.focusUid ? api.posOf(v.focusUid) : null;
   // duel layout: the two front pokémon face each other in the middle, the rest wait in the back rows
   const foeStyle = (f: Battler, i: number): React.CSSProperties => {
-    if (duel) return f.uid === duel.foeUid ? { right: '8%', top: '5%' } : { left: `${2 + i * 17}%`, top: '11%' };
-    return foeN === 1 ? { right: '6%', top: '4%' } : { right: `${4 + i * 31}%`, top: `${3 + (i % 2) * 6}%` };
+    if (duel) return f.uid === duel.foeUid ? { right: '8%', top: 'calc(5% + var(--safe-t))' } : { left: `${2 + i * 17}%`, top: 'calc(11% + var(--safe-t))' };
+    return foeN === 1 ? { right: '6%', top: 'calc(4% + var(--safe-t))' } : { right: `${4 + i * 31}%`, top: `calc(${3 + (i % 2) * 6}% + var(--safe-t))` };
   };
   const allyStyle = (a: Battler, i: number): React.CSSProperties => {
     if (duel) return a.uid === duel.allyUid ? { left: '8%', bottom: '7%' } : { right: `${2 + i * 17}%`, bottom: '1%' };
@@ -250,7 +250,7 @@ export function BattleStage({ api, bg, scene, myOwnerId, pendingUids = [], emote
         <div className="bg" style={{ background: bg }}>{scene && <Scene id={scene} />}</div>
         {v.speedlines && <div className="speedlines" />}
         <div className="zoom" style={{ transform: v.zoom, transformOrigin: v.zoomOrigin }}>
-          {b && <Combatant key={b.uid} b={b} cls={`${v.cls[b.uid] ?? ''} solo`} size={Math.min(300, (api.refs.root.current?.clientWidth ?? 390) * 0.72)} style={{ left: '50%', top: '44%', transform: 'translate(-50%,-50%)' }} pops={v.pops} mine={!!myOwnerId && b.ownerId === myOwnerId} tired={select.tiredUids?.includes(b.uid)} callout={v.callout?.uid === b.uid ? v.callout.text : undefined} emotes={emotes.filter(e => e.playerId === b.ownerId)} />}
+          {b && <Combatant key={b.uid} b={b} cls={`${v.cls[b.uid] ?? ''} solo`} size={Math.min(300, (api.refs.root.current?.clientWidth ?? 390) * 0.72)} style={{ left: '50%', top: 'calc(44% + var(--safe-t) / 2)', transform: 'translate(-50%,-50%)' }} pops={v.pops} mine={!!myOwnerId && b.ownerId === myOwnerId} tired={select.tiredUids?.includes(b.uid)} callout={v.callout?.uid === b.uid ? v.callout.text : undefined} emotes={emotes.filter(e => e.playerId === b.ownerId)} />}
         </div>
         {v.nameplate && <div className={`nameplate ${b?.side ?? ''}`}><b>{v.nameplate.text}</b>{v.nameplate.sub && <small>{v.nameplate.sub}</small>}</div>}
         <TeamHud side="foe" list={v.foes} front={select.targetUid ?? null} tired={[]} />
