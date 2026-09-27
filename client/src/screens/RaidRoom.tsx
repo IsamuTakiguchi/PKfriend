@@ -112,7 +112,7 @@ export function RaidRoom() {
           <button className="btn sm" style={{ pointerEvents: 'auto', background: 'rgba(0,0,0,.5)' }} onClick={() => setLeaveAsk(true)}>でる</button>
         </div>
         {sub === 'special' && mine?.mark && <SpecialChance kind={mine.mark} onDone={onSpecial} />}
-        {sub === 'roulette' && <AttackRoulette onDone={onRoulette} />}
+        {sub === 'roulette' && <AttackRoulette powered={!!special} onDone={onRoulette} />}
         {catchStep === 'roulette' && <BallRoulette onDone={onBall} />}
         {catchStep === 'throw' && room.boss && room.chosenBall && myResult && <ThrowBall api={api} target={room.boss} ball={room.chosenBall} resolve={async () => ({ success: myResult.success, shakes: myResult.shakes })} onDone={() => setCatchStep('done')} />}
       </BattleStage>

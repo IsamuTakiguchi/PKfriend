@@ -1,85 +1,145 @@
-import { useEffect, useRef, useState } from 'react';
-import { BALL_WHEEL, BALL_JA, type BallKind, type SpecialKind, SPECIAL_JA } from '@pkfriend/shared';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { BALL_JA, type BallKind, type SpecialKind, SPECIAL_JA } from '@pkfriend/shared';
 import { sfx } from '../audio';
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-export const ROULETTE_NUMBERS = [3, 6, 2, 8, 4, 10, 5, 7]; // 10 is the red number
+export const ROULETTE_NUMBERS = [1, 5, 2, 8, 3, 10, 4, 6, 7, 9]; // 10 is the red number
+export const BALL_WHEEL_ITEMS: BallKind[] = ['monster', 'super', 'monster', 'hyper', 'monster', 'super', 'master', 'monster', 'super', 'hyper'];
 
+// ------------------------------------------------------------------ big rotating wheel (only the top part is on screen)
 /**
- * こうげきルーレット: (1) ボタンを連打してパワーをためる → (2) まわる数字を ねらって とめる。
- * Result 1..10; the mash bonus (0..+3) is added, capped at 10.
+ * A large disc whose top is visible; the disc itself spins and a fixed pointer at the top picks the segment.
+ * `stopSignal` > 0 starts the deceleration; onStopped fires with the index under the pointer.
  */
-export function AttackRoulette({ title = 'こうげきルーレット！', onDone, tired = false }: { title?: string; onDone: (n: number) => void; tired?: boolean }) {
-  const [phase, setPhase] = useState<'mash' | 'spin' | 'result'>('mash');
-  const [mash, setMash] = useState(0);
-  const [idx, setIdx] = useState(0);
+function BigWheel<T>({ items, render, spinSpeed = 260, stopSignal, onStopped, className = '' }: { items: T[]; render: (item: T, i: number, selected: boolean) => ReactNode; spinSpeed?: number; stopSignal: number; onStopped: (index: number) => void; className?: string }) {
+  const [angle, setAngle] = useState(0); const [selected, setSelected] = useState<number | null>(null);
+  const angleRef = useRef(0); const raf = useRef(0); const stopping = useRef(false); const done = useRef(false);
+  const N = items.length; const step = 360 / N;
+  const indexAt = (a: number) => (((Math.round((-a % 360 + 360) % 360 / step)) % N) + N) % N;
+  useEffect(() => {
+    let last = performance.now(); let vel = spinSpeed;
+    let target: number | null = null;
+    const tick = (t: number) => {
+      const dt = Math.min(0.05, (t - last) / 1000); last = t;
+      if (stopping.current && target === null) { // pick a landing angle 2-3 turns ahead, aligned to a segment centre
+        const extra = 720 + Math.random() * 360; const raw = angleRef.current + extra;
+        target = Math.round(raw / step) * step;
+      }
+      if (target !== null) {
+        const remain = target - angleRef.current;
+        if (remain <= 0.5) { angleRef.current = target; setAngle(target); if (!done.current) { done.current = true; const idx = indexAt(target); setSelected(idx); onStopped(idx); } return; }
+        vel = Math.max(40, remain * 2.2);
+      }
+      const before = indexAt(angleRef.current);
+      angleRef.current += vel * dt; setAngle(angleRef.current);
+      if (indexAt(angleRef.current) !== before) sfx.tick();
+      raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => { if (stopSignal > 0) stopping.current = true; }, [stopSignal]);
+  const cur = indexAt(angleRef.current);
+  return (
+    <div className={`bigwheel-wrap ${className}`}>
+      <div className="bigwheel-pointer">▼</div>
+      <div className="bigwheel" style={{ transform: `rotate(${angle}deg)` }}>
+        {items.map((it, i) => <div key={i} className={`bw-seg ${(selected ?? cur) === i ? 'on' : ''} ${selected === i ? 'final' : ''}`} style={{ transform: `rotate(${i * step}deg)` }}><div className="bw-inner">{render(it, i, selected === i)}</div></div>)}
+        <div className="bw-hub" />
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------------ こうげきルーレット → ボタン連打（おうえん）
+/**
+ * Frienda order: (special chance first, handled by the caller) → the wheel spins, stop it → mash both buttons to cheer.
+ * Result: roulette number (+1 when powered) plus a mash bonus of up to +3.
+ */
+export function AttackRoulette({ title = 'こうげきルーレット！', onDone, tired = false, powered = false }: { title?: string; onDone: (n: number) => void; tired?: boolean; powered?: boolean }) {
+  const [phase, setPhase] = useState<'spin' | 'mash' | 'result'>('spin');
+  const [stopSig, setStopSig] = useState(0);
+  const [num, setNum] = useState<number | null>(null);
+  const [mash, setMash] = useState(0); const mashRef = useRef(0); const lastSide = useRef<'L' | 'R' | null>(null);
+  const [left, setLeft] = useState(2.6);
   const [result, setResult] = useState<number | null>(null);
-  const [left, setLeft] = useState(2.2);
-  const idxRef = useRef(0); const raf = useRef(0); const mashRef = useRef(0);
 
-  // tired pokémon: the roulette does not spin (Frienda: つかれていると こうげきルーレットが はつどうしない)
-  useEffect(() => { if (tired) { setPhase('result'); setResult(2); sfx.debuff(); const t = setTimeout(() => onDone(2), 1100); return () => clearTimeout(t); } }, [tired]); // eslint-disable-line react-hooks/exhaustive-deps
-
+  useEffect(() => { if (tired) { setPhase('result'); setResult(2); sfx.debuff(); const t = setTimeout(() => onDone(2), 1300); return () => clearTimeout(t); } }, [tired]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    if (tired || phase !== 'mash') return;
+    if (phase !== 'mash') return;
     const t0 = performance.now();
-    const tick = () => { const l = Math.max(0, 2.2 - (performance.now() - t0) / 1000); setLeft(l); if (l > 0) raf.current = requestAnimationFrame(tick); else setPhase('spin'); };
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
-  }, [phase, tired]);
-
-  useEffect(() => {
-    if (phase !== 'spin') return;
-    let last = performance.now(); const speed = 70 + Math.min(60, mashRef.current * 2);
-    const tick = (t: number) => { if (t - last > speed) { last = t; idxRef.current = (idxRef.current + 1) % ROULETTE_NUMBERS.length; setIdx(idxRef.current); sfx.tick(); } raf.current = requestAnimationFrame(tick); };
-    raf.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf.current);
+    const id = setInterval(() => { const l = Math.max(0, 2.6 - (performance.now() - t0) / 1000); setLeft(l); if (l <= 0) { clearInterval(id); finish(); } }, 50);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  function hit() { if (phase !== 'mash') return; mashRef.current++; setMash(mashRef.current); if (mashRef.current % 4 === 0) sfx.click(); }
-  async function stop() {
-    if (phase !== 'spin') return;
-    cancelAnimationFrame(raf.current);
-    const base = ROULETTE_NUMBERS[idxRef.current];
-    const bonus = Math.min(3, Math.floor(mashRef.current / 8));
-    const n = Math.min(10, base + bonus);
-    setResult(n); setPhase('result');
-    if (n >= 10) sfx.crit(); else if (n >= 7) sfx.superEff(); else sfx.select();
-    await sleep(1000); onDone(n);
+  function stopped(idx: number) {
+    const base = ROULETTE_NUMBERS[idx] + (powered ? 1 : 0);
+    setNum(base);
+    if (base >= 10) sfx.crit(); else if (base >= 7) sfx.superEff(); else sfx.select();
+    setTimeout(() => setPhase('mash'), 900);
   }
-  const gauge = Math.min(1, mash / 24);
+  function hit(side: 'L' | 'R') {
+    if (phase !== 'mash') return;
+    mashRef.current += lastSide.current && lastSide.current !== side ? 1.5 : 1; lastSide.current = side; // alternating is worth more
+    setMash(Math.floor(mashRef.current)); if (Math.floor(mashRef.current) % 5 === 0) sfx.click();
+  }
+  async function finish() {
+    const bonus = Math.min(3, Math.floor(mashRef.current / 12));
+    const n = Math.min(13, (num ?? 5) + bonus);
+    setResult(n); setPhase('result');
+    if (n >= 10) sfx.crit(); else sfx.superEff();
+    await sleep(1100); onDone(n);
+  }
+  const gauge = Math.min(1, mash / 36);
   return (
-    <div className="mg-wrap" onPointerDown={phase === 'mash' ? hit : undefined}>
-      <div className="mg-title">{title}</div>
+    <div className="mg-wrap">
+      <div className="mg-title">{title}{powered && <small style={{ display: 'block', fontSize: 12, color: '#ffd54a' }}>パワーアップ中！ 虹色の数字を ねらえ</small>}</div>
       {tired ? <div className="mg-big" style={{ color: '#9aa0c3' }}>つかれている…<small>ルーレットが まわらない！</small></div> : (
         <>
-          <div className="wheel">
-            {ROULETTE_NUMBERS.map((n, i) => { const a = (i / ROULETTE_NUMBERS.length) * 360; return <div key={i} className={`seg ${i === idx && phase !== 'mash' ? 'on' : ''} ${n === 10 ? 'red' : ''}`} style={{ transform: `rotate(${a}deg) translateY(-92px) rotate(${-a}deg)` }}>{n}</div>; })}
-            <div className="hub">{phase === 'result' ? result : phase === 'mash' ? Math.ceil(left) : '?'}</div>
-          </div>
-          {phase === 'mash' && <><div className="gauge"><i style={{ width: `${gauge * 100}%` }} /></div><button className="btn primary lg mg-btn">🔥 れんだ！ ×{mash}</button></>}
-          {phase === 'spin' && <button className="btn gold lg mg-btn" onPointerDown={stop}>🎯 とめる！{mash >= 8 && <small>（れんだボーナス +{Math.min(3, Math.floor(mash / 8))}）</small>}</button>}
-          {phase === 'result' && <div className={`mg-big ${result === 10 ? 'red' : ''}`}>{result}{result === 10 ? '！！' : ''}<small>{result! >= 8 ? 'すごい！ だいダメージ！' : result! >= 5 ? 'いいかんじ！' : 'うーん…'}</small></div>}
+          {phase === 'spin' && <>
+            <BigWheel items={ROULETTE_NUMBERS} stopSignal={stopSig} onStopped={stopped} render={(n, _i, sel) => <span className={`bw-num ${n === 10 ? (powered ? 'rainbow' : 'red') : ''} ${sel ? 'sel' : ''}`}>{n + (powered ? 1 : 0)}</span>} />
+            <button className="btn gold lg mg-btn" disabled={stopSig > 0} onPointerDown={() => { if (!stopSig) { sfx.click(); setStopSig(1); } }}>🎯 ストップ！</button>
+            {num !== null && <div className={`mg-big ${num >= 10 ? 'red' : ''}`}>{num}</div>}
+          </>}
+          {phase === 'mash' && <>
+            <div className={`mg-big ${(num ?? 0) >= 10 ? 'red' : ''}`} style={{ fontSize: 40 }}>{num}<small>わざを くりだすぞ！ 両はしの ボタンを れんだで おうえん！ {left.toFixed(1)}s</small></div>
+            <div className="gauge"><i style={{ width: `${gauge * 100}%` }} /></div>
+            <div className="mash-row">
+              <button className="mash-btn" onPointerDown={() => hit('L')}>L<small>れんだ</small></button>
+              <div className="mash-count">×{mash}{mash >= 12 && <small>+{Math.min(3, Math.floor(mash / 12))}</small>}</div>
+              <button className="mash-btn" onPointerDown={() => hit('R')}>R<small>れんだ</small></button>
+            </div>
+          </>}
+          {phase === 'result' && <div className={`mg-big ${(result ?? 0) >= 10 ? 'red' : ''}`}>{result}{(result ?? 0) >= 10 ? '！！' : ''}<small>{(result ?? 0) >= 9 ? 'すごい！ だいダメージ！' : (result ?? 0) >= 5 ? 'いいかんじ！' : 'うーん…'}</small></div>}
         </>
       )}
     </div>
   );
 }
 
-/** ボールルーレット: まわる ボールを ねらって とめる。 */
+// ------------------------------------------------------------------ ボールルーレット: 円盤が回る。とめる or ボールを上に ドラッグして なげる
 export function BallRoulette({ onDone, title = 'ボールルーレット！' }: { onDone: (b: BallKind) => void; title?: string }) {
-  const [idx, setIdx] = useState(0); const [stopped, setStopped] = useState<BallKind | null>(null);
-  const idxRef = useRef(0); const raf = useRef(0);
-  useEffect(() => { if (stopped) return; let last = performance.now(); const tick = (t: number) => { if (t - last > 110) { last = t; idxRef.current = (idxRef.current + 1) % BALL_WHEEL.length; setIdx(idxRef.current); sfx.tick(); } raf.current = requestAnimationFrame(tick); }; raf.current = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf.current); }, [stopped]);
-  async function stop() { if (stopped) return; cancelAnimationFrame(raf.current); const b = BALL_WHEEL[idxRef.current]; setStopped(b); if (b === 'master') sfx.crit(); else if (b === 'hyper') sfx.superEff(); else sfx.select(); await sleep(1100); onDone(b); }
+  const [stopSig, setStopSig] = useState(0); const [stopped, setStopped] = useState<BallKind | null>(null); const [thrown, setThrown] = useState(false);
+  const drag = useRef<{ y: number; t: number } | null>(null); const [dragDy, setDragDy] = useState(0);
+  async function done(idx: number) { const b = BALL_WHEEL_ITEMS[idx]; setStopped(b); if (b === 'master') sfx.crit(); else if (b === 'hyper') sfx.superEff(); else sfx.select(); await sleep(1000); onDone(b); }
+  function release(e: React.PointerEvent) {
+    if (!drag.current || stopSig) { drag.current = null; return; }
+    const dy = e.clientY - drag.current.y; const dt = Math.max(1, performance.now() - drag.current.t);
+    drag.current = null; setDragDy(0);
+    if (dy < -70 && -dy / dt > 0.25) { setThrown(true); sfx.throwBall(); setStopSig(1); }
+  }
   return (
-    <div className="mg-wrap">
+    <div className="mg-wrap" onPointerDown={e => { if (!stopSig) drag.current = { y: e.clientY, t: performance.now() }; }} onPointerMove={e => { if (drag.current) setDragDy(Math.min(0, e.clientY - drag.current.y)); }} onPointerUp={release} onPointerCancel={() => { drag.current = null; setDragDy(0); }}>
       <div className="mg-title">{title}</div>
-      <div className="wheel">
-        {BALL_WHEEL.map((b, i) => { const a = (i / BALL_WHEEL.length) * 360; return <div key={i} className={`seg ball-${b} ${i === idx ? 'on' : ''}`} style={{ transform: `rotate(${a}deg) translateY(-92px) rotate(${-a}deg)` }}><BallIcon kind={b} /></div>; })}
-        <div className="hub">{stopped ? <BallIcon kind={stopped} size={40} /> : '?'}</div>
-      </div>
-      {!stopped ? <button className="btn gold lg mg-btn" onPointerDown={stop}>🎯 とめる！</button> : <div className="mg-big" style={{ fontSize: 22 }}>{BALL_JA[stopped]}！<small>{stopped === 'master' ? 'かならず つかまえられる！' : stopped === 'hyper' ? 'とても つかまえやすい！' : stopped === 'super' ? 'つかまえやすい！' : 'ふつうの ボール'}</small></div>}
+      <BigWheel items={BALL_WHEEL_ITEMS} spinSpeed={200} stopSignal={stopSig} onStopped={done} render={(b, _i, sel) => <BallIcon kind={b} size={sel ? 44 : 34} />} className="ballwheel" />
+      {!stopped ? (
+        <>
+          <div className="throw-hint" style={{ transform: `translateY(${dragDy * 0.6}px) scale(${1 - dragDy / 600})` }}><BallIcon kind="monster" size={54} /><small>{thrown ? 'なげた！' : '↑ 上に ドラッグして なげる（タップで とめても OK）'}</small></div>
+          <button className="btn gold lg mg-btn" disabled={stopSig > 0} onPointerDown={e => { e.stopPropagation(); if (!stopSig) { sfx.click(); setStopSig(1); } }}>🎯 とめて なげる！</button>
+        </>
+      ) : <div className="mg-big" style={{ fontSize: 22 }}>{BALL_JA[stopped]}！<small>{stopped === 'master' ? 'かならず つかまえられる！' : stopped === 'hyper' ? 'とても つかまえやすい！' : stopped === 'super' ? 'つかまえやすい！' : 'ふつうの ボール'}</small></div>}
     </div>
   );
 }
@@ -88,37 +148,69 @@ export function BallIcon({ kind, size = 26 }: { kind: BallKind; size?: number })
   return <span className="ballicon" style={{ width: size, height: size, background: `linear-gradient(180deg, ${top} 0 46%, #111 46% 54%, #f4f4f8 54%)` }} />;
 }
 
-/** せんこうチャンス: あいての ほうが はやい！ 1.5秒 れんだして 線を あおに かえろう。 */
-export function MashChance({ need = 12, onDone }: { need?: number; onDone: (won: boolean) => void }) {
-  const [count, setCount] = useState(0); const [left, setLeft] = useState(1.6); const done = useRef(false); const cRef = useRef(0);
-  useEffect(() => { const t0 = performance.now(); const id = setInterval(() => { const l = Math.max(0, 1.6 - (performance.now() - t0) / 1000); setLeft(l); if (l <= 0 && !done.current) { done.current = true; clearInterval(id); const won = cRef.current >= need; won ? sfx.superEff() : sfx.miss(); setTimeout(() => onDone(won), 700); } }, 50); return () => clearInterval(id); }, [need, onDone]);
-  function hit() { if (done.current) return; cRef.current++; setCount(cRef.current); sfx.tick(); if (cRef.current >= need && !done.current) { done.current = true; sfx.superEff(); setTimeout(() => onDone(true), 600); } }
+// ------------------------------------------------------------------ せんこうチャンス: 両はしの ボタンを れんだして 線を あおに
+export function MashChance({ need = 14, onDone }: { need?: number; onDone: (won: boolean) => void }) {
+  const [count, setCount] = useState(0); const [left, setLeft] = useState(1.8); const done = useRef(false); const cRef = useRef(0);
+  useEffect(() => { const t0 = performance.now(); const id = setInterval(() => { const l = Math.max(0, 1.8 - (performance.now() - t0) / 1000); setLeft(l); if (l <= 0 && !done.current) { done.current = true; clearInterval(id); const won = cRef.current >= need; won ? sfx.superEff() : sfx.miss(); setTimeout(() => onDone(won), 700); } }, 50); return () => clearInterval(id); }, [need, onDone]);
+  function hit() { if (done.current) return; cRef.current++; setCount(cRef.current); sfx.tick(); if (cRef.current >= need) { done.current = true; sfx.superEff(); setTimeout(() => onDone(true), 600); } }
   const won = count >= need;
   return (
-    <div className="mg-wrap" onPointerDown={hit}>
+    <div className="mg-wrap">
       <div className="mg-title">⚡ せんこうチャンス！</div>
       <div className="mg-big" style={{ color: won ? '#66e0ff' : '#ff5f6d' }}>{won ? 'せんこう ゲット！' : `${count} / ${need}`}<small>{won ? 'さきに こうげきできる！' : `れんだして 線を あおに かえろう！ ${left.toFixed(1)}s`}</small></div>
       <div className="gauge"><i style={{ width: `${Math.min(100, (count / need) * 100)}%`, background: won ? '#66e0ff' : '#ff5f6d' }} /></div>
-      <button className="btn primary lg mg-btn">👆 れんだ！</button>
+      <div className="mash-row"><button className="mash-btn" onPointerDown={hit}>L<small>れんだ</small></button><div className="mash-count">×{count}</div><button className="mash-btn" onPointerDown={hit}>R<small>れんだ</small></button></div>
     </div>
   );
 }
 
-/** 〇〇チャンス (テラスタル / Zワザ / メガシンカ / タッグわざ / ダイマックス): 光るマークで とめる。 */
-export function SpecialChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
-  const N = 8; const target = 5;
-  const [idx, setIdx] = useState(0); const [res, setRes] = useState<boolean | null>(null); const idxRef = useRef(0); const raf = useRef(0);
-  useEffect(() => { if (res !== null) return; let last = performance.now(); const tick = (t: number) => { if (t - last > 95) { last = t; idxRef.current = (idxRef.current + 1) % N; setIdx(idxRef.current); sfx.tick(); } raf.current = requestAnimationFrame(tick); }; raf.current = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf.current); }, [res]);
-  async function stop() { if (res !== null) return; cancelAnimationFrame(raf.current); const ok = idxRef.current === target || idxRef.current === (target + 1) % N; setRes(ok); ok ? sfx.cutin() : sfx.miss(); await sleep(ok ? 1200 : 800); onDone(ok); }
+// ------------------------------------------------------------------ 特殊チャンス
+/** メガシンカ / ダイマックス: 上から流れてくる マークを 5回 つづけて タッチ。 */
+export function FallingMarks({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
   const icon = { tera: '💎', z: '🌀', mega: '🧬', tag: '🤝', dyna: '🔺' }[kind];
+  const [marks, setMarks] = useState<{ id: number; x: number; born: number; hit?: boolean }[]>([]);
+  const [streak, setStreak] = useState(0); const [res, setRes] = useState<boolean | null>(null);
+  const seq = useRef(0); const streakRef = useRef(0); const over = useRef(false);
+  useEffect(() => {
+    const spawn = setInterval(() => { if (over.current) return; setMarks(m => [...m.filter(x => performance.now() - x.born < 2600), { id: ++seq.current, x: 12 + Math.random() * 76, born: performance.now() }]); }, 620);
+    const judge = setInterval(() => { setMarks(m => { const now = performance.now(); const missed = m.some(x => !x.hit && now - x.born > 1900 && now - x.born < 1960); if (missed && !over.current) { streakRef.current = 0; setStreak(0); sfx.miss(); } return m; }); }, 40);
+    const timeout = setTimeout(() => { if (!over.current) { over.current = true; setRes(false); sfx.miss(); setTimeout(() => onDone(false), 900); } }, 9000);
+    return () => { clearInterval(spawn); clearInterval(judge); clearTimeout(timeout); };
+  }, [onDone]);
+  function tap(id: number) {
+    if (over.current) return;
+    setMarks(m => m.map(x => x.id === id ? { ...x, hit: true } : x));
+    streakRef.current++; setStreak(streakRef.current); sfx.select();
+    if (streakRef.current >= 5) { over.current = true; setRes(true); sfx.cutin(); setTimeout(() => onDone(true), 1200); }
+  }
+  return (
+    <div className="mg-wrap falling">
+      <div className="mg-title">{icon} {SPECIAL_JA[kind]}チャンス！</div>
+      <div className="mg-sub">上から ながれてくる マークを <b>5回 つづけて</b> タッチ！</div>
+      <div className="fall-area">
+        {marks.map(m => !m.hit && <button key={m.id} className="fall-mark" style={{ left: `${m.x}%` }} onPointerDown={() => tap(m.id)}>{icon}</button>)}
+      </div>
+      <div className="streak">{Array.from({ length: 5 }, (_, i) => <span key={i} className={i < streak ? 'on' : ''}>{icon}</span>)}</div>
+      {res !== null && <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? 'こうげきルーレットが パワーアップ！' : 'ふつうの こうげきに なる'}</small></div>}
+    </div>
+  );
+}
+
+/** テラスタル / Zワザ / タッグわざ: 光るマークで ルーレットを とめる。 */
+export function SpecialChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
+  if (kind === 'mega' || kind === 'dyna') return <FallingMarks kind={kind} onDone={onDone} />;
+  return <AimChance kind={kind} onDone={onDone} />;
+}
+function AimChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
+  const icon = { tera: '💎', z: '🌀', mega: '🧬', tag: '🤝', dyna: '🔺' }[kind];
+  const items = Array.from({ length: 10 }, (_, i) => (i === 4 || i === 5 ? icon : '・'));
+  const [stopSig, setStopSig] = useState(0); const [res, setRes] = useState<boolean | null>(null);
+  async function stopped(idx: number) { const ok = items[idx] === icon; setRes(ok); ok ? sfx.cutin() : sfx.miss(); await sleep(ok ? 1200 : 800); onDone(ok); }
   return (
     <div className="mg-wrap">
       <div className="mg-title">{icon} {SPECIAL_JA[kind]}チャンス！</div>
-      <div className="wheel">
-        {Array.from({ length: N }, (_, i) => { const a = (i / N) * 360; return <div key={i} className={`seg ${i === idx ? 'on' : ''} ${i === target ? 'glow' : ''}`} style={{ transform: `rotate(${a}deg) translateY(-92px) rotate(${-a}deg)` }}>{i === target ? icon : '・'}</div>; })}
-        <div className="hub">{res === null ? '?' : res ? icon : '✕'}</div>
-      </div>
-      {res === null ? <button className="btn gold lg mg-btn" onPointerDown={stop}>✨ 光っている マークで とめる！</button> : <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? { tera: 'わざの いりょくが パワーアップ！', z: 'ぜんりょくの Zワザだ！', mega: 'こうげきが あがった！', tag: 'なかまと いっしょに こうげき！', dyna: 'きょだいな ちからが みなぎる！' }[kind] : 'ふつうの こうげきに なる'}</small></div>}
+      <BigWheel items={items} spinSpeed={230} stopSignal={stopSig} onStopped={stopped} render={(it, _i, sel) => <span className={`bw-num ${it === icon ? 'glow' : ''} ${sel ? 'sel' : ''}`}>{it}</span>} />
+      {res === null ? <button className="btn gold lg mg-btn" disabled={stopSig > 0} onPointerDown={() => { if (!stopSig) setStopSig(1); }}>✨ 光っている マークで とめる！</button> : <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? { tera: 'わざの いりょくが パワーアップ！', z: 'ぜんりょくの Zワザだ！', mega: 'こうげきが あがった！', tag: 'なかまと いっしょに こうげき！', dyna: 'きょだいな ちからが みなぎる！' }[kind] : 'ふつうの こうげきに なる'}</small></div>}
     </div>
   );
 }

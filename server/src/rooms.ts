@@ -116,7 +116,7 @@ export class BattleRoom extends Room {
     const b = this.state.allies.find(a => a.ownerId === c.player.id && !a.fainted);
     if (!b) return;
     if (!b.moves.includes(moveId)) return this.send(c, { t: 'error', message: 'そのわざは つかえません' });
-    const r = roulette === undefined ? undefined : Math.max(1, Math.min(10, Math.round(Number(roulette) || 5)));
+    const r = roulette === undefined ? undefined : Math.max(1, Math.min(13, Math.round(Number(roulette) || 5)));
     this.actions.set(b.uid, { battlerUid: b.uid, moveId, targetUid: this.boss!.uid, roulette: r, special });
     this.touch();
     if (this.pendingUids().length === 0) this.resolve();

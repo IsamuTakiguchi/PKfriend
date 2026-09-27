@@ -194,13 +194,15 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
     if (!attacker || !target || busy) return;
     sfx.click();
     pending.current = { attackerUid: attacker.uid, targetUid: target.uid };
-    const owned = team.find(p => p.uid === attacker.uid);
-    if (owned?.mark && !usedSpecial.current.has(attacker.uid)) { usedSpecial.current.add(attacker.uid); setPhase('special'); return; }
-    afterSpecial();
+    if (!iAmFaster) setPhase('mash'); else afterInitiative();
   }
-  function afterSpecial() { if (!iAmFaster) setPhase('mash'); else setPhase('roulette'); }
-  function onSpecial(ok: boolean) { const p = pending.current!; const owned = team.find(x => x.uid === p.attackerUid); if (ok && owned?.mark) p.special = owned.mark; afterSpecial(); }
-  function onMash(won: boolean) { if (won) pending.current!.initiative = 5; setPhase('roulette'); }
+  function afterInitiative() {
+    const p = pending.current!; const owned = team.find(x => x.uid === p.attackerUid);
+    if (owned?.mark && !usedSpecial.current.has(p.attackerUid)) { usedSpecial.current.add(p.attackerUid); setPhase('special'); return; }
+    setPhase('roulette');
+  }
+  function onMash(won: boolean) { if (won) pending.current!.initiative = 5; afterInitiative(); }
+  function onSpecial(ok: boolean) { const p = pending.current!; const owned = team.find(x => x.uid === p.attackerUid); if (ok && owned?.mark) p.special = owned.mark; setPhase('roulette'); }
   function onRoulette(n: number) {
     const p = pending.current!; p.roulette = n;
     if (p.special === 'tag') { const partner = aliveAllies().find(a => a.uid !== p.attackerUid && a.uid !== tiredRef.current) ?? aliveAllies().find(a => a.uid !== p.attackerUid); if (partner) { p.assistUid = partner.uid; setPhase('tagRoulette'); return; } }
@@ -312,7 +314,7 @@ function Encounter({ area, team, onExit }: { area: Area; team: OwnedPokemon[]; o
       <BattleStage api={api} bg={area.bg} myOwnerId={player.id} select={{ targetUid, attackerUid, tiredUids: tiredUid ? [tiredUid] : [], onSelectAlly: canChoose ? uid => chooseAttacker(uid) : undefined }}>
         {phase === 'special' && attacker && <SpecialChance kind={team.find(p => p.uid === attacker.uid)!.mark!} onDone={onSpecial} />}
         {phase === 'mash' && <MashChance onDone={onMash} />}
-        {phase === 'roulette' && <AttackRoulette tired={attackerUid === tiredUid} onDone={onRoulette} />}
+        {phase === 'roulette' && <AttackRoulette tired={attackerUid === tiredUid} powered={!!pending.current?.special} onDone={onRoulette} />}
         {phase === 'tagRoulette' && <AttackRoulette title="🤝 タッグわざルーレット！" onDone={onTagRoulette} />}
         {phase === 'followup' && <FollowUpChance name={getSpecies(player.avatarSpeciesId).ja} onDone={onFollowUp} />}
         {phase === 'ballRoulette' && <BallRoulette onDone={onBall} />}
