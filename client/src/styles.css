@@ -88,7 +88,7 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .combatant .art { position: relative; display: flex; align-items: flex-end; justify-content: center; transition: transform .25s, filter .2s; }
 .combatant .art:has(> .static) { animation: idle 3s ease-in-out infinite; } /* only the still artwork needs a fake bob */
 .combatant .art > .sprite { transform: scaleX(var(--flip)); }
-.sprite.ani { image-rendering: pixelated; filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
+.sprite.ani { filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
 @keyframes idle { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
 .combatant.lunge-right .art { animation: lungeR .5s; } .combatant.lunge-left .art { animation: lungeL .5s; }
 @keyframes lungeR { 30% { transform: translate(40px,-20px) scale(1.05); } 60% { transform: translate(60px,-30px) scale(1.08); } 100% { transform: translate(0,0); } }

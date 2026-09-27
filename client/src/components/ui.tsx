@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { loadSmooth, frameAt, type SmoothAnim } from '../smoothsprite';
 import { artworkUrl, animatedUrl, getSpecies, getMove, TYPE_COLOR, TYPE_JA, levelFromExp, displayName, expToNext, gradeOf, pokeEne, speedLevel, calcStats, SPECIAL_JA, type TypeName, type OwnedPokemon } from '@pkfriend/shared';
 import { useToast } from '../toast';
 
@@ -13,23 +14,41 @@ export function Sprite({ id, shiny, size = 96, className = '', silhouette = fals
 /**
  * Animated battle sprite: the GIF keeps its natural proportions (a Pikachu stays smaller than a Charizard),
  * scaled up to fill at most `box` px and anchored to the bottom of the box so it stands on the ground.
- * Falls back to the static official artwork when the GIF is missing.
+ * While the xBR-smoothed frames are being prepared the plain GIF is shown; if the GIF is missing the
+ * static official artwork is used instead.
  */
 export function BattleSprite({ id, shiny, box, maxScale = 3.4 }: { id: number; shiny?: boolean; box: number; maxScale?: number }) {
-  const [failed, setFailed] = useState(false);
-  const [nat, setNat] = useState<{ w: number; h: number } | null>(null);
-  const [key, setKey] = useState(`${id}:${shiny}`);
-  if (key !== `${id}:${shiny}`) { setKey(`${id}:${shiny}`); setFailed(false); setNat(null); }
-  if (failed) return <Sprite id={id} shiny={shiny} size="100%" className="static" />;
-  const k = nat ? Math.min((box * 0.94) / Math.max(nat.w, nat.h), maxScale) : 0;
+  const url = animatedUrl(id, shiny);
+  const [state, setState] = useState<{ url: string; failed: boolean; nat: { w: number; h: number } | null; anim: SmoothAnim | null }>({ url, failed: false, nat: null, anim: null });
+  const st = state.url === url ? state : { url, failed: false, nat: null, anim: null };
+  if (st !== state) setState(st);
+  useEffect(() => {
+    let alive = true;
+    loadSmooth(url).then(anim => { if (alive) setState(s => (s.url === url ? { ...s, anim, nat: { w: anim.w, h: anim.h } } : s)); }).catch(() => {});
+    return () => { alive = false; };
+  }, [url]);
+  const nat = st.nat; const k = nat ? Math.min((box * 0.94) / Math.max(nat.w, nat.h), maxScale) : 0;
+  const cw = nat ? Math.round(nat.w * k) : 0, ch = nat ? Math.round(nat.h * k) : 0;
+  const cref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const a = st.anim, c = cref.current; if (!a || !c || !cw) return;
+    const dpr = Math.min(3, window.devicePixelRatio || 1); const bw = Math.min(1100, Math.round(cw * dpr)), bh = Math.round((bw * ch) / cw);
+    c.width = bw; c.height = bh; const ctx = c.getContext('2d')!; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    let raf = 0, last = -1;
+    const tick = (t: number) => { const i = frameAt(a, t); if (i !== last) { last = i; ctx.clearRect(0, 0, bw, bh); ctx.drawImage(a.frames[i], 0, 0, bw, bh); } raf = requestAnimationFrame(tick); };
+    raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf);
+  }, [st.anim, cw, ch]);
+  if (st.failed && !st.anim) return <Sprite id={id} shiny={shiny} size="100%" className="static" />;
+  if (st.anim) return <canvas ref={cref} className="sprite ani" style={{ width: cw, height: ch }} aria-label={getSpecies(id).ja} />;
   return (
-    <img className="sprite ani" src={animatedUrl(id, shiny)} alt={getSpecies(id).ja} draggable={false}
-      style={nat ? { width: Math.round(nat.w * k), height: Math.round(nat.h * k) } : { width: box * 0.6, height: box * 0.6, visibility: 'hidden' }}
-      onLoad={e => { const im = e.currentTarget; if (im.naturalWidth) setNat({ w: im.naturalWidth, h: im.naturalHeight }); }}
-      onError={() => setFailed(true)} />
+    <img className="sprite ani" src={url} alt={getSpecies(id).ja} draggable={false} crossOrigin="anonymous"
+      style={nat ? { width: cw, height: ch } : { width: box * 0.6, height: box * 0.6, visibility: 'hidden' }}
+      onLoad={e => { const im = e.currentTarget; if (im.naturalWidth) setState(s => (s.url === url && !s.nat ? { ...s, nat: { w: im.naturalWidth, h: im.naturalHeight } } : s)); }}
+      onError={() => setState(s => (s.url === url ? { ...s, failed: true } : s))} />
   );
 }
-export function preloadAnimated(id: number, shiny?: boolean) { const im = new Image(); im.src = animatedUrl(id, shiny); }
+/** Start decoding + smoothing a battler's animation ahead of time. */
+export function preloadAnimated(id: number, shiny?: boolean) { void loadSmooth(animatedUrl(id, shiny)).catch(() => {}); }
 
 export function TypeBadge({ t }: { t: TypeName }) { return <span className="pill" style={{ background: TYPE_COLOR[t] }}>{TYPE_JA[t]}</span>; }
 export function Types({ id }: { id: number }) { return <span className="row" style={{ gap: 4 }}>{getSpecies(id).types.map(t => <TypeBadge key={t} t={t} />)}</span>; }

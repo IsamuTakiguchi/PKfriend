@@ -1,9 +1,9 @@
 // Minimal app-shell service worker: network-first for navigation, cache-first for assets & sprites.
 const SHELL = 'pkfriend-shell-v1';
-const IMAGES = 'pkfriend-img-v1';
+const IMAGES = 'pkfriend-img-v2'; // v2: sprites are fetched with CORS (for canvas smoothing)
 const ROOT = self.registration.scope; // works at '/' and at a sub path such as '/PKfriend/'
 self.addEventListener('install', e => { self.skipWaiting(); });
-self.addEventListener('activate', e => { e.waitUntil(clients.claim()); });
+self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== SHELL && k !== IMAGES).map(k => caches.delete(k)))).then(() => clients.claim())); });
 self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
@@ -14,7 +14,7 @@ self.addEventListener('fetch', e => {
     return;
   }
   if (url.hostname === 'raw.githubusercontent.com' || url.hostname === 'fonts.gstatic.com') {
-    e.respondWith(caches.open(IMAGES).then(async cache => { const hit = await cache.match(req); if (hit) return hit; const r = await fetch(req); if (r.ok) cache.put(req, r.clone()); return r; }));
+    e.respondWith(caches.open(IMAGES).then(async cache => { const hit = await cache.match(req); if (hit && !(hit.type === 'opaque' && req.mode === 'cors')) return hit; const r = await fetch(req); if (r.ok) cache.put(req, r.clone()); return r; }));
     return;
   }
   if (url.origin === location.origin) {
