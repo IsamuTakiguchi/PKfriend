@@ -31,6 +31,9 @@ export const lines = {
   ball: (ja: string) => `${ja}だ！`,
   caught: (n: string) => `やった！${n}をゲットだ！`,
   escaped: (n: string) => `ああ、${n}に逃げられた。`,
+  /** while the ball shakes (0 = first shake) */
+  shakeTension: (i: number) => ['よし…！', 'まだか…！', 'たのむ…！'][Math.min(2, Math.max(0, i))],
+  almost: () => 'ああっ！おしい！',
   win: () => 'バトル終了！お見事！',
   lose: () => '全滅。次は頑張ろう！',
   bossAppear: (n: string) => `ボスの${n}が現れた！みんなで倒そう！`,
@@ -51,7 +54,7 @@ export function allLines(): string[] {
   const out = new Set<string>();
   const L = lines;
   for (const f of [L.welcome, L.wildAppear, L.initiativeChance, L.roulette, L.tired, L.cheer, L.superEffective, L.crit, L.ballRoulette, L.win, L.lose, L.joined, L.exchange, L.bonus, L.evolveStart, L.nowGet]) out.add(f());
-  out.add(L.getTime(true)); out.add(L.getTime(false)); out.add(L.reaction(true)); out.add(L.reaction(false));
+  out.add(L.getTime(true)); out.add(L.getTime(false)); out.add(L.almost()); for (let i = 0; i < 3; i++) out.add(L.shakeTension(i)); out.add(L.reaction(true)); out.add(L.reaction(false));
   for (let n = 1; n <= 13; n++) out.add(L.bigNumber(n));
   for (const b of Object.values(BALL_JA)) out.add(L.ball(b));
   for (const k of Object.values(SPECIAL_JA)) { out.add(L.specialChance(k)); out.add(L.specialFalling(k)); out.add(L.specialAim(k)); out.add(L.specialDone(k)); }
@@ -70,7 +73,7 @@ export function allLines(): string[] {
 /** Delivery mood for a line: picks the VOICEVOX style (熱血 / 喜び / かなしみ / ノーマル) and the intonation settings. */
 export type Mood = 'hot' | 'joy' | 'sad' | 'normal';
 export function moodOf(text: string): Mood {
-  if (/逃げられた|全滅|疲れていて/.test(text)) return 'sad';
+  if (/逃げられた|全滅|疲れていて|おしい/.test(text)) return 'sad';
   if (/ゲットだ|おめでとう|お見事|最高の数字|レベルアップ|進化した/.test(text)) return 'joy';
   if (/ようこそ|お菓子|何かいるぞ|^[1-6]。$|ボールだ！$|様子が/.test(text)) return 'normal';
   return 'hot';

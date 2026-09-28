@@ -147,14 +147,34 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .ring-wrap .target { position: absolute; inset: 0; border-radius: 50%; border: 6px solid rgba(255,255,255,.35); }
 .ring-wrap .good { position: absolute; border-radius: 50%; border: 8px solid rgba(76,217,100,.55); }
 .ring-wrap .ring { position: absolute; left: 50%; top: 50%; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 0 20px #fff; transform: translate(-50%,-50%); }
-.ball { position: absolute; width: 44px; height: 44px; border-radius: 50%; background: linear-gradient(180deg, #ff3b30 0 46%, #111 46% 54%, #f4f4f8 54%); z-index: 11; box-shadow: 0 6px 16px rgba(0,0,0,.5); transform: translate(-50%,-50%); }
-.ball::after { content: ''; position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 3px solid #111; transform: translate(-50%,-50%); }
-.ball.throw { animation: throwball .8s cubic-bezier(.3,.6,.4,1) forwards; }
-@keyframes throwball { 0% { transform: translate(-50%,-50%) scale(1) rotate(0); } 50% { transform: translate(-50%, -260%) scale(1.15) rotate(360deg); } 100% { transform: translate(-50%,-50%) scale(1) rotate(720deg); } }
-.ball.wobble { animation: wobble .7s; } @keyframes wobble { 0%,100% { transform: translate(-50%,-50%) rotate(0); } 25% { transform: translate(-60%,-50%) rotate(-25deg); } 75% { transform: translate(-40%,-50%) rotate(25deg); } }
-.ball.caught { animation: caught .6s forwards; } @keyframes caught { 50% { transform: translate(-50%,-50%) scale(1.2); filter: brightness(1.8); } 100% { transform: translate(-50%,-50%) scale(1); filter: brightness(.7); } }
-.ball.open { animation: openball .4s forwards; } @keyframes openball { to { transform: translate(-50%,-50%) scale(1.6); opacity: 0; } }
-.combatant.sucked .art { animation: sucked .5s forwards; } @keyframes sucked { to { transform: scale(0) translateY(-60px); filter: brightness(4); opacity: 0; } }
+.catch-ball { position: absolute; z-index: 11; line-height: 0; transform: translate(-50%,-50%); filter: drop-shadow(0 8px 10px rgba(0,0,0,.5)); pointer-events: none; }
+.catch-ball.fly { animation: ballfly .78s cubic-bezier(.25,.6,.35,1) forwards; }
+@keyframes ballfly { 0% { transform: translate(-50%,-50%) translate(var(--sx), var(--sy)) scale(1.9) rotate(0deg); } 50% { transform: translate(-50%,-50%) translate(calc(var(--sx) * .4), calc(var(--sy) * .25 - 110px)) scale(1.25) rotate(-540deg); } 100% { transform: translate(-50%,-50%) scale(1) rotate(-1080deg); } }
+.catch-ball.hop { animation: ballhop .3s ease-out; }
+@keyframes ballhop { 45% { transform: translate(-50%, calc(-50% - 26px)) rotate(-14deg); } 100% { transform: translate(-50%,-50%); } }
+.catch-ball.opened .lid { transform: rotate(-42deg); }
+.catch-ball.opened { filter: drop-shadow(0 0 16px #ff3b30) drop-shadow(0 8px 10px rgba(0,0,0,.5)); }
+.catch-ball.drop { animation: balldrop .64s linear forwards; }
+@keyframes balldrop { 0% { transform: translate(-50%,-50%); animation-timing-function: cubic-bezier(.5,0,.9,.5); } 60% { transform: translate(-50%, calc(-50% + var(--dy))); animation-timing-function: ease-out; } 78% { transform: translate(-50%, calc(-50% + var(--dy) - 24px)); animation-timing-function: ease-in; } 90% { transform: translate(-50%, calc(-50% + var(--dy))); animation-timing-function: ease-out; } 95% { transform: translate(-50%, calc(-50% + var(--dy) - 6px)); } 100% { transform: translate(-50%, calc(-50% + var(--dy))); } }
+.catch-ball.wobble { animation: cwobble .76s ease-in-out; }
+.catch-ball.wobble.big { animation: cwobblebig .94s ease-in-out; }
+@keyframes cwobble { 0%,100% { transform: translate(-50%,-50%) rotate(0); } 22% { transform: translate(-60%,-50%) rotate(-26deg); } 50% { transform: translate(-40%,-50%) rotate(22deg); } 75% { transform: translate(-53%,-50%) rotate(-8deg); } }
+@keyframes cwobblebig { 0%,100% { transform: translate(-50%,-50%) rotate(0); } 18% { transform: translate(-64%,-52%) rotate(-38deg); } 42% { transform: translate(-36%,-52%) rotate(34deg); } 64% { transform: translate(-58%,-50%) rotate(-18deg); } 84% { transform: translate(-46%,-50%) rotate(8deg); } }
+.catch-ball.wobble .ball-btn { animation: btnred .76s; } .catch-ball.wobble.big .ball-btn { animation-duration: .94s; }
+@keyframes btnred { 25%,60% { fill: #ff6b6b; } }
+.catch-ball.tremble { animation: ctremble .08s linear infinite; filter: drop-shadow(0 0 14px #ff3b30) drop-shadow(0 8px 10px rgba(0,0,0,.5)); }
+.catch-ball.tremble .ball-btn { fill: #ff3b30; }
+@keyframes ctremble { 0% { transform: translate(-53%,-50%) rotate(-7deg); } 50% { transform: translate(-47%,-51%) rotate(7deg); } 100% { transform: translate(-53%,-50%) rotate(-7deg); } }
+.catch-ball.burst { animation: cburst .55s ease-out forwards; }
+.catch-ball.burst .lid { transform: translate(-6px,-38px) rotate(-75deg); }
+@keyframes cburst { 30% { transform: translate(-50%,-50%) scale(1.35); filter: brightness(2.5); } 100% { transform: translate(-50%,-50%) scale(1.5); opacity: 0; } }
+.catch-ball.caught { animation: ccaught .7s ease-out forwards; }
+.catch-ball.caught .ball-btn { fill: #ffe066; }
+@keyframes ccaught { 35% { transform: translate(-50%,-50%) scale(1.18); filter: brightness(1.7) drop-shadow(0 0 18px #ffe066); } 100% { transform: translate(-50%,-50%) scale(1); filter: brightness(.9) drop-shadow(0 8px 10px rgba(0,0,0,.5)); } }
+.catch-beam { position: absolute; z-index: 10; width: 120px; transform: translateX(-50%); pointer-events: none; clip-path: polygon(44% 0, 56% 0, 100% 100%, 0 100%); background: linear-gradient(180deg, #fff 0%, #ff4d4d 30%, rgba(255,40,40,.15) 100%); mix-blend-mode: screen; animation: beamflick .09s steps(2) infinite; }
+@keyframes beamflick { 50% { opacity: .65; } }
+.catch-vignette { position: absolute; inset: 0; z-index: 10; pointer-events: none; background: radial-gradient(circle at var(--vx, 50%) var(--vy, 60%), transparent 70px, rgba(0,0,10,.9) 330px); transition: opacity .7s; }
+.combatant.sucked .art { animation: sucked .7s ease-in forwards; } @keyframes sucked { 30% { transform: scale(1.04); filter: brightness(0) invert(1) sepia(1) saturate(9) hue-rotate(-50deg) drop-shadow(0 0 18px #ff3b30); } to { transform: scale(0) translateY(-40%); filter: brightness(0) invert(1) sepia(1) saturate(9) hue-rotate(-50deg); opacity: 0; } }
 .combatant.popout .art { animation: popout .4s forwards; } @keyframes popout { from { transform: scale(0); filter: brightness(4); } }
 
 /* pick card reveal */
@@ -200,8 +220,9 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .mg-big { font-size: 48px; font-weight: 900; color: #ffd54a; text-shadow: 0 3px 0 #000, 0 0 30px rgba(255,213,74,.6); text-align: center; animation: bannerin .3s; line-height: 1; }
 .mg-big.red { color: #ff5f6d; text-shadow: 0 3px 0 #000, 0 0 40px #ff5f6d; font-size: 64px; }
 .mg-big small { display: block; font-size: 14px; color: #fff; margin-top: 8px; text-shadow: 0 1px 2px #000; }
-.ballicon { display: inline-block; border-radius: 50%; position: relative; box-shadow: 0 2px 6px rgba(0,0,0,.4); vertical-align: middle; }
-.ballicon::after { content: ''; position: absolute; left: 50%; top: 50%; width: 30%; height: 30%; border-radius: 50%; background: #fff; border: 2px solid #111; transform: translate(-50%,-50%); }
+.ballicon { display: inline-block; border-radius: 50%; position: relative; vertical-align: middle; line-height: 0; filter: drop-shadow(0 2px 3px rgba(0,0,0,.45)); }
+.ballsvg { display: block; overflow: visible; }
+.ballsvg .lid { transform-box: view-box; transform-origin: 8px 50px; transition: transform .22s cubic-bezier(.3,1.6,.5,1); }
 .bar-track { position: relative; width: 260px; height: 26px; border-radius: 999px; background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.25); overflow: hidden; }
 .bar-good { position: absolute; top: 0; bottom: 0; background: rgba(76,217,100,.6); } .bar-cursor { position: absolute; top: -4px; bottom: -4px; width: 6px; background: #fff; box-shadow: 0 0 10px #fff; transform: translateX(-3px); }
 
@@ -355,7 +376,9 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .throw-arrow { font-size: 26px; color: #ffd54a; animation: bob 0.7s infinite alternate; text-shadow: 0 2px 0 #000; }
 .throw-ball { touch-action: none; cursor: grab; padding: 14px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,.25), transparent 70%); transition: transform .08s; will-change: transform; }
 .throw-ball:active { cursor: grabbing; }
-.throw-ball.flying { transition: transform .45s cubic-bezier(.2,.8,.2,1), opacity .4s; opacity: 0; }
+.throw-ball.flying { transition: transform .55s cubic-bezier(.15,.7,.3,1); pointer-events: none; }
+.throw-spin { display: block; line-height: 0; filter: drop-shadow(0 6px 8px rgba(0,0,0,.5)); }
+.throw-ball.flying .throw-spin { animation: spin .35s linear infinite; }
 
 /* ------------------------------------------------ illustrated scenes */
 .scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }

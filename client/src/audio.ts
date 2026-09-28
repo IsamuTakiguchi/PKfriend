@@ -133,6 +133,9 @@ export const sfx = {
   // --- catching
   throwBall: () => { tone(600, 0.45, { type: 'sine', gain: 0.1, slide: 1400, wet: 0.5 }); whoosh(0.45, 0, true, 0.3); },
   ballHit: () => { tone(900, 0.12, { type: 'square', gain: 0.1, slide: 300 }); noise(0.12, { gain: 0.25, hp: 1500 }); tone(1800, 0.4, { type: 'sine', gain: 0.12, slide: 4000, delay: 0.1, wet: 1 }); },
+  heartbeat: () => { tone(64, 0.13, { type: 'sine', gain: 0.5, slide: 44 }); tone(58, 0.16, { type: 'sine', gain: 0.38, slide: 40, delay: 0.19 }); },
+  tremble: () => { for (let i = 0; i < 8; i++) tone(240 + (i % 2) * 60, 0.05, { type: 'square', gain: 0.07, delay: i * 0.07 }); noise(0.55, { gain: 0.12, lp: 900 }); },
+  ballOpen: () => { tone(1200, 0.25, { type: 'sine', gain: 0.1, slide: 2400, wet: 0.6 }); noise(0.2, { gain: 0.15, hp: 3000 }); },
   shake: () => { tone(320, 0.14, { type: 'square', gain: 0.1, slide: 200 }); noise(0.08, { gain: 0.25, lp: 1500 }); },
   breakOut: () => { noise(0.35, { gain: 0.5, lp: 2500, dist: true }); tone(700, 0.3, { type: 'sawtooth', gain: 0.12, slide: 150 }); boom(0.0, 0.8); },
   caught: () => { [523, 523, 523, 659, 784, 1047].forEach((f, i) => tone(f, i === 5 ? 0.8 : 0.14, { type: 'square', gain: 0.1, delay: [0, 0.12, 0.24, 0.36, 0.48, 0.6][i], wet: 0.6 })); noise(0.6, { gain: 0.2, hp: 5000, delay: 0.6, wet: 1 }); },

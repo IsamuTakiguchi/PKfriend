@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Ball } from '../components/Ball';
 import { BALL_JA, type BallKind, type SpecialKind, SPECIAL_JA } from '@pkfriend/shared';
 import { sfx } from '../audio';
 import { say, lines } from '../voice';
@@ -152,8 +153,8 @@ export function BallRoulette({ onDone, title = 'ボールルーレット！' }: 
       {!stopped ? (
         <div className="throw-zone">
           <div className="throw-arrow">⬆</div>
-          <div className={`throw-ball ${thrown ? 'flying' : ''}`} style={{ transform: `translate(${pos.x * 0.4}px, ${pos.y}px) scale(${1 - pos.y / 900})` }} onPointerDown={down}>
-            <BallIcon kind="monster" size={72} />
+          <div className={`throw-ball ${thrown ? 'flying' : ''}`} style={{ transform: thrown ? 'translate(0, -330px) scale(.42)' : `translate(${pos.x * 0.4}px, ${pos.y}px) scale(${1 + pos.y / 1200})` }} onPointerDown={down}>
+            <span className="throw-spin"><Ball kind="monster" size={72} /></span>
           </div>
           <small>{thrown ? 'なげた！' : 'ボールを つかんで 上に はじこう！'}</small>
         </div>
@@ -162,8 +163,7 @@ export function BallRoulette({ onDone, title = 'ボールルーレット！' }: 
   );
 }
 export function BallIcon({ kind, size = 26 }: { kind: BallKind; size?: number }) {
-  const top = { monster: '#ff3b30', super: '#3b82f6', hyper: '#111', master: '#7c3aed' }[kind];
-  return <span className="ballicon" style={{ width: size, height: size, background: `linear-gradient(180deg, ${top} 0 46%, #111 46% 54%, #f4f4f8 54%)` }} />;
+  return <span className="ballicon" style={{ width: size, height: size }}><Ball kind={kind} size={size} /></span>;
 }
 
 // ------------------------------------------------------------------ せんこうチャンス: 両はしの ボタンを れんだして 線を あおに
