@@ -184,6 +184,9 @@ export function MashChance({ need = 14, onDone }: { need?: number; onDone: (won:
 }
 
 // ------------------------------------------------------------------ 特殊チャンス
+/** What a successful chance does (メガシンカ・テラスタル・ダイマックスは すがたも かわる). */
+const SPECIAL_WIN: Record<SpecialKind, string> = { mega: '進化の限界を こえて すがたが かわる！', tera: 'からだが クリスタルに かがやく！', dyna: 'からだが きょだいに なる！', z: 'ぜんりょくの Zワザだ！', tag: 'なかまと いっしょに こうげき！' };
+const SPECIAL_HINT: Partial<Record<SpecialKind, string>> = { mega: '成功すると 進化の限界を こえた すがたに！', tera: '成功すると クリスタルの すがたに！', dyna: '成功すると きょだいな すがたに！' };
 /** メガシンカ / ダイマックス: 上から流れてくる マークを 5回 つづけて タッチ。 */
 export function FallingMarks({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) => void }) {
   useEffect(() => { say(lines.specialFalling(SPECIAL_JA[kind]), { priority: true }); }, [kind]);
@@ -206,12 +209,12 @@ export function FallingMarks({ kind, onDone }: { kind: SpecialKind; onDone: (ok:
   return (
     <div className="mg-wrap falling">
       <div className="mg-title">{icon} {SPECIAL_JA[kind]}チャンス！</div>
-      <div className="mg-sub">上から ながれてくる マークを <b>5回 つづけて</b> タッチ！</div>
+      <div className="mg-sub">上から ながれてくる マークを <b>5回 つづけて</b> タッチ！{SPECIAL_HINT[kind] && <><br />{SPECIAL_HINT[kind]}</>}</div>
       <div className="fall-area">
         {marks.map(m => !m.hit && <button key={m.id} className="fall-mark" style={{ left: `${m.x}%` }} onPointerDown={() => tap(m.id)}>{icon}</button>)}
       </div>
       <div className="streak">{Array.from({ length: 5 }, (_, i) => <span key={i} className={i < streak ? 'on' : ''}>{icon}</span>)}</div>
-      {res !== null && <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? 'こうげきルーレットが パワーアップ！' : 'ふつうの こうげきに なる'}</small></div>}
+      {res !== null && <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? SPECIAL_WIN[kind] : 'ふつうの こうげきに なる'}</small></div>}
     </div>
   );
 }
@@ -230,8 +233,9 @@ function AimChance({ kind, onDone }: { kind: SpecialKind; onDone: (ok: boolean) 
   return (
     <div className="mg-wrap">
       <div className="mg-title">{icon} {SPECIAL_JA[kind]}チャンス！</div>
+      {SPECIAL_HINT[kind] && <div className="mg-sub">{SPECIAL_HINT[kind]}</div>}
       <BigWheel items={items} spinSpeed={230} stopSignal={stopSig} onStopped={stopped} render={(it, _i, sel) => <span className={`bw-num ${it === icon ? 'glow' : ''} ${sel ? 'sel' : ''}`}>{it}</span>} />
-      {res === null ? <button className="btn gold lg mg-btn" disabled={stopSig > 0} onPointerDown={() => { if (!stopSig) setStopSig(1); }}>✨ 光っている マークで とめる！</button> : <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? { tera: 'わざの いりょくが パワーアップ！', z: 'ぜんりょくの Zワザだ！', mega: 'こうげきが あがった！', tag: 'なかまと いっしょに こうげき！', dyna: 'きょだいな ちからが みなぎる！' }[kind] : 'ふつうの こうげきに なる'}</small></div>}
+      {res === null ? <button className="btn gold lg mg-btn" disabled={stopSig > 0} onPointerDown={() => { if (!stopSig) setStopSig(1); }}>✨ 光っている マークで とめる！</button> : <div className="mg-big">{res ? `${SPECIAL_JA[kind]} せいこう！` : 'しっぱい…'}<small>{res ? SPECIAL_WIN[kind] : 'ふつうの こうげきに なる'}</small></div>}
     </div>
   );
 }

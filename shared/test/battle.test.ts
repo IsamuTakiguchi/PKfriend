@@ -128,6 +128,8 @@ describe('frienda rules', () => {
     const order = ev.filter(e => e.kind === 'move_used').map(e => (e as { userUid: string }).userUid);
     expect(order[0]).toBe(slow.uid);
     expect(ev.some(e => e.kind === 'special')).toBe(true);
+    // the transformation is shown before the attack
+    expect(ev.findIndex(e => e.kind === 'special')).toBeLessThan(ev.findIndex(e => e.kind === 'move_used' && e.userUid === slow.uid));
     expect(ev.some(e => e.kind === 'assist') || fast.fainted).toBe(true);
   });
   it('ball roulette: master ball always catches, better ball wins', async () => {
@@ -139,6 +141,20 @@ describe('frienda rules', () => {
     expect(m.catchChanceBall(t2, 'hyper')).toBeGreaterThan(m.catchChanceBall(t2, 'monster'));
     expect(m.bestBall(['monster', 'hyper', 'super'])).toBe('hyper');
   });
+  it('special chances transform the pokémon: mega beyond the evolution limit, tera crystal, dynamax / gigantamax', async () => {
+    const m = await import('../src/index');
+    expect(m.megaForm(4, 0)).toMatchObject({ kind: 'mega', spriteId: 10034, realForm: true });   // ヒトカゲ -> メガリザードンX
+    expect(m.megaForm(6, 1).spriteId).toBe(10035);                                                  // リザードン -> メガリザードンY
+    expect(m.megaForm(25, 0)).toMatchObject({ spriteId: 26, name: 'メガライチュウ', realForm: false }); // no mega in the line
+    expect(m.megaForm(129, 0).name).toBe('メガギャラドス');                                         // コイキング -> メガギャラドス
+    expect(m.dynaForm(25)).toMatchObject({ spriteId: 10199, realForm: true });                      // キョダイマックスピカチュウ
+    expect(m.dynaForm(4)).toMatchObject({ spriteId: 4, realForm: false });
+    expect(m.teraForm(25, 'water')).toMatchObject({ kind: 'tera', teraType: 'water', spriteId: 25 });
+    expect(m.formFor('z', 25, 0, 'electric')).toBeNull();
+    const counts: Record<string, number> = {}; for (let i = 0; i < 1000; i++) { const k = m.markFromRoll(i / 1000); counts[k] = (counts[k] ?? 0) + 1; }
+    expect(counts.mega + counts.tera + counts.dyna).toBeGreaterThan(700);
+  });
+
   it('picks have grades, marks and a main move; trainers and exchange offers are generated', async () => {
     const m = await import('../src/index.js');
     expect(m.gradeOf(150)).toBe(5); expect(m.gradeOf(19)).toBe(2);

@@ -85,7 +85,7 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .combatant { position: absolute; display: flex; flex-direction: column; align-items: center; transition: left .5s, bottom .5s, top .5s, right .5s, width .5s; }
 .combatant { --d: -1; --flip: 1; }
 .combatant.ally { --d: 1; --flip: -1; } /* allies face right (mirrored), foes face left */
-.combatant .art { position: relative; display: flex; align-items: flex-end; justify-content: center; transition: transform .25s, filter .2s; }
+.combatant .art { position: relative; display: flex; align-items: flex-end; justify-content: center; transform-origin: 50% 100%; transition: transform .25s, filter .2s, scale 1.2s cubic-bezier(.3,1.5,.5,1); }
 .combatant .art:has(> .static) { animation: idle 3s ease-in-out infinite; } /* only the still artwork needs a fake bob */
 .combatant .art > .sprite { transform: scaleX(var(--flip)); }
 .sprite.ani { filter: drop-shadow(0 6px 8px rgba(0,0,0,.45)); }
@@ -369,3 +369,36 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 @keyframes rise { from { transform: translateY(0); opacity: .8; } to { transform: translateY(-320px); opacity: 0; } }
 @keyframes float { 0%, 100% { transform: translate(195px, 520px) translateY(0); } 50% { transform: translate(195px, 520px) translateY(-14px); } }
 @keyframes sweep { from { transform: rotate(-8deg); transform-origin: 50% 0; } to { transform: rotate(8deg); transform-origin: 50% 0; } }
+
+/* ---------------------------------------------------------------- transformations (special chance success) */
+/* メガシンカ: beyond the evolution limit — new shape with a rainbow aura */
+.combatant.form-mega .art > .sprite { animation: megaglow 2.4s linear infinite; }
+@keyframes megaglow { 0%,100% { filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 16px #ff5252); } 20% { filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 16px #ffd740); } 40% { filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 16px #69f0ae); } 60% { filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 16px #40c4ff); } 80% { filter: drop-shadow(0 0 5px #fff) drop-shadow(0 0 16px #e040fb); } }
+.combatant.form-mega.pseudo .art { scale: 1.12; }
+.mega-mark { position: absolute; left: 50%; transform: translateX(-50%); width: 34px; height: 34px; border-radius: 50%; background: conic-gradient(#ff5252, #ffd740, #69f0ae, #40c4ff, #e040fb, #ff5252); display: grid; place-items: center; box-shadow: 0 0 14px rgba(255,255,255,.9); z-index: 2; pointer-events: none; animation: megamark 1.6s ease-in-out infinite; }
+.mega-mark span { width: 24px; height: 24px; border-radius: 50%; background: #1a1030; color: #fff; font-weight: 900; font-size: 14px; display: grid; place-items: center; }
+@keyframes megamark { 50% { transform: translateX(-50%) translateY(-5px); box-shadow: 0 0 22px #fff; } }
+.combatant.evolving .art { animation: evolving 2.3s ease-in-out; }
+@keyframes evolving { 0% { filter: none; } 15%,100% { filter: brightness(0) invert(1) drop-shadow(0 0 22px #fff); } 30%,62%,86% { transform: scale(1.1,.9); } 46%,74%,96% { transform: scale(.9,1.12); } }
+.combatant.formed .art { animation: formed .9s cubic-bezier(.2,1.4,.4,1); }
+@keyframes formed { 0% { transform: scale(1.3); filter: brightness(2.6); } 100% { transform: none; filter: none; } }
+/* テラスタル: crystal body (drawn on the sprite canvas) + jewel crown */
+.combatant.form-tera .art > .sprite { filter: drop-shadow(0 0 4px #fff) drop-shadow(0 0 14px rgba(170,240,255,.9)); }
+.tera-crown { position: absolute; left: 50%; transform: translateX(-50%); z-index: 2; pointer-events: none; filter: drop-shadow(0 0 8px var(--tera)) drop-shadow(0 2px 2px rgba(0,0,0,.45)); animation: crownbob 2s ease-in-out infinite; }
+@keyframes crownbob { 50% { transform: translateX(-50%) translateY(-5px); } }
+.combatant.crystallizing .art { animation: crystallizing 1.7s ease-in; }
+@keyframes crystallizing { 0% { filter: none; } 60% { filter: brightness(1.7) saturate(.3) drop-shadow(0 0 22px #bff); transform: scale(1.03); } 80% { transform: translate(-3px, 0) scale(1.03); } 90% { transform: translate(3px, 0) scale(1.03); } 100% { filter: brightness(3) saturate(0) drop-shadow(0 0 30px #fff); } }
+/* ダイマックス: gigantic, red glow and red clouds (キョダイマックス also changes shape) */
+.combatant.form-dyna .art { scale: 1.5; }
+.stage.solo-mode .combatant.solo.form-dyna { top: calc(53% + var(--safe-t) / 2) !important; }
+.combatant.form-dyna .art > .sprite { filter: drop-shadow(0 0 8px #ff1744) drop-shadow(0 0 24px rgba(255,23,68,.75)); }
+.combatant.growing .art { animation: growing 1.4s ease-out; }
+@keyframes growing { 0% { filter: none; } 20% { filter: brightness(2) saturate(1.6) drop-shadow(0 0 30px #ff1744); } 35%,55%,75% { transform: translateX(-4px); } 45%,65%,85% { transform: translateX(4px); } 100% { filter: none; transform: none; } }
+.dyna-clouds { position: absolute; left: 50%; transform: translateX(-50%); pointer-events: none; z-index: 2; }
+.dyna-clouds i { position: absolute; border-radius: 50%; background: radial-gradient(circle at 45% 40%, rgba(255,120,150,.7), rgba(215,0,60,.45) 50%, rgba(120,0,40,0) 70%); animation: dynacloud 4s ease-in-out infinite; }
+.dyna-clouds i:nth-child(1) { width: 34%; height: 80%; left: 4%; top: 22%; }
+.dyna-clouds i:nth-child(2) { width: 38%; height: 100%; left: 30%; top: 0; animation-delay: -1s; }
+.dyna-clouds i:nth-child(3) { width: 32%; height: 78%; left: 60%; top: 20%; animation-delay: -2s; }
+.dyna-clouds i:nth-child(4) { width: 24%; height: 56%; left: 20%; top: 46%; animation-delay: -3s; }
+@keyframes dynacloud { 0%,100% { transform: translate(-8px, 2px) scale(1); opacity: .85; } 50% { transform: translate(8px, -6px) scale(1.12); opacity: 1; } }
+.hud-chip .form-badge { font-size: 11px; margin-left: 2px; }

@@ -75,11 +75,14 @@ export function newUid(prefix = 'p'): string {
 export const SPECIAL_KINDS: SpecialKind[] = ['tera', 'z', 'mega', 'tag', 'dyna'];
 export const SPECIAL_JA: Record<SpecialKind, string> = { tera: 'テラスタル', z: 'Zワザ', mega: 'メガシンカ', tag: 'タッグわざ', dyna: 'ダイマックス' };
 export const MARK_RATE = 0.3;
+/** Which special a marked pick carries — the three transforming chances are the common ones. */
+const MARK_WEIGHTS: [SpecialKind, number][] = [['mega', 0.26], ['tera', 0.26], ['dyna', 0.26], ['z', 0.11], ['tag', 0.11]];
+export function markFromRoll(r: number): SpecialKind { let acc = 0; for (const [k, w] of MARK_WEIGHTS) { acc += w; if (r < acc) return k; } return 'mega'; }
 
 export function createOwned(opts: { speciesId: number; level: number; rng: Rng; ownerId: string; ownerName: string; origin: OwnedPokemon['origin']; shiny?: boolean; mark?: SpecialKind | null }): OwnedPokemon {
   const s = getSpecies(opts.speciesId);
   const level = Math.max(1, Math.min(MAX_LEVEL, opts.level));
-  const mark = opts.mark === null ? undefined : opts.mark ?? (opts.rng() < MARK_RATE ? SPECIAL_KINDS[Math.floor(opts.rng() * SPECIAL_KINDS.length)] : undefined);
+  const mark = opts.mark === null ? undefined : opts.mark ?? (opts.rng() < MARK_RATE ? markFromRoll(opts.rng()) : undefined);
   return {
     uid: newUid(), speciesId: s.id, exp: expForLevel(level), ivs: randomIvs(opts.rng),
     moves: movesFor(s.id, s.types, level), shiny: opts.shiny ?? opts.rng() < SHINY_RATE, mark,

@@ -78,6 +78,8 @@ function useMove(state: BattleState, user: Battler, moveId: string, target: Batt
     target = pool[Math.floor(rng() * pool.length)];
   }
   const move = getMove(moveId);
+  // a successful special chance transforms the pokémon (mega / tera / dyna …) before it attacks
+  if (action.special) { events.push({ kind: 'special', userUid: user.uid, special: action.special }); if (action.special === 'mega') { applyStage(user, 'atk', 1, events); applyStage(user, 'spa', 1, events); } }
   events.push({ kind: 'move_used', userUid: user.uid, targetUid: move.category === 'status' && move.effect !== 'atkDown' && move.effect !== 'defDown' ? user.uid : target.uid, moveId });
   if (rng() * 100 >= move.accuracy) { events.push({ kind: 'miss', userUid: user.uid, targetUid: target.uid }); return; }
 
@@ -94,7 +96,7 @@ function useMove(state: BattleState, user: Battler, moveId: string, target: Batt
   }
 
   let mult = rouletteMultiplier(action.roulette);
-  if (action.special) { events.push({ kind: 'special', userUid: user.uid, special: action.special }); mult *= SPECIAL_MULT[action.special]; if (action.special === 'mega') { applyStage(user, 'atk', 1, events); applyStage(user, 'spa', 1, events); } }
+  if (action.special) mult *= SPECIAL_MULT[action.special];
   const partner = action.assistUid ? find(state, action.assistUid) : undefined;
   if (action.special === 'tag' && partner && !partner.fainted) mult += rouletteMultiplier(action.assistRoulette ?? 5) * 0.8;
   const r = calcDamage(user, target, moveId, rng, mult);

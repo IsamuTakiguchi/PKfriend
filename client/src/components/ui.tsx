@@ -17,8 +17,8 @@ export function Sprite({ id, shiny, size = 96, className = '', silhouette = fals
  * While the xBR-smoothed frames are being prepared the plain GIF is shown; if the GIF is missing the
  * static official artwork is used instead.
  */
-export function BattleSprite({ id, shiny, box, maxScale = 3.4 }: { id: number; shiny?: boolean; box: number; maxScale?: number }) {
-  const url = animatedUrl(id, shiny);
+export function BattleSprite({ id, shiny, box, maxScale = 3.4, formId, form, tera }: { id: number; shiny?: boolean; box: number; maxScale?: number; formId?: number; form?: 'mega' | 'tera' | 'dyna'; tera?: string }) {
+  const url = animatedUrl(formId ?? id, shiny);
   const [state, setState] = useState<{ url: string; failed: boolean; nat: { w: number; h: number } | null; anim: SmoothAnim | null }>({ url, failed: false, nat: null, anim: null });
   const st = state.url === url ? state : { url, failed: false, nat: null, anim: null };
   if (st !== state) setState(st);
@@ -35,17 +35,67 @@ export function BattleSprite({ id, shiny, box, maxScale = 3.4 }: { id: number; s
     const dpr = Math.min(3, window.devicePixelRatio || 1); const bw = Math.min(1100, Math.round(cw * dpr)), bh = Math.round((bw * ch) / cw);
     c.width = bw; c.height = bh; const ctx = c.getContext('2d')!; ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     let raf = 0, last = -1;
-    const tick = (t: number) => { const i = frameAt(a, t); if (i !== last) { last = i; ctx.clearRect(0, 0, bw, bh); ctx.drawImage(a.frames[i], 0, 0, bw, bh); } raf = requestAnimationFrame(tick); };
+    const tex = tera ? crystalTex(tera) : null;
+    const tick = (t: number) => {
+      const i = frameAt(a, t);
+      if (i !== last || tex) {
+        last = i; ctx.clearRect(0, 0, bw, bh); ctx.drawImage(a.frames[i], 0, 0, bw, bh);
+        if (tex) { // テラスタル: crystal facets clipped to the pokémon's silhouette + a travelling glint
+          ctx.globalCompositeOperation = 'source-atop'; ctx.globalAlpha = 0.62; ctx.drawImage(tex, 0, 0, bw, bh);
+          const x = (((t / 1700) % 1.6) - 0.3) * bw; const g = ctx.createLinearGradient(x - bw * 0.12, 0, x + bw * 0.12, bh * 0.3);
+          g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.85)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+          ctx.globalAlpha = 1; ctx.fillStyle = g; ctx.fillRect(0, 0, bw, bh); ctx.globalCompositeOperation = 'source-over';
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
     raf = requestAnimationFrame(tick); return () => cancelAnimationFrame(raf);
-  }, [st.anim, cw, ch]);
+  }, [st.anim, cw, ch, tera]);
+  const overlay = nat && form ? <FormOverlay form={form} w={cw} h={ch} tera={tera} /> : null;
   if (st.failed && !st.anim) return <Sprite id={id} shiny={shiny} size="100%" className="static" />;
-  if (st.anim) return <canvas ref={cref} className="sprite ani" style={{ width: cw, height: ch }} aria-label={getSpecies(id).ja} />;
+  if (st.anim) return <><canvas ref={cref} className="sprite ani" style={{ width: cw, height: ch }} aria-label={getSpecies(id).ja} />{overlay}</>;
   return (
+    <>
     <img className="sprite ani" src={url} alt={getSpecies(id).ja} draggable={false} crossOrigin="anonymous"
       style={nat ? { width: cw, height: ch } : { width: box * 0.6, height: box * 0.6, visibility: 'hidden' }}
       onLoad={e => { const im = e.currentTarget; if (im.naturalWidth) setState(s => (s.url === url && !s.nat ? { ...s, nat: { w: im.naturalWidth, h: im.naturalHeight } } : s)); }}
       onError={() => setState(s => (s.url === url ? { ...s, failed: true } : s))} />
+    {overlay}
+    </>
   );
+}
+
+/** Faceted crystal texture in the tera type's colour (cached per colour). */
+const crystalCache = new Map<string, HTMLCanvasElement>();
+function crystalTex(color: string): HTMLCanvasElement {
+  const hit = crystalCache.get(color); if (hit) return hit;
+  const S = 256, N = 7, c = document.createElement('canvas'); c.width = c.height = S; const g = c.getContext('2d')!;
+  g.fillStyle = color; g.fillRect(0, 0, S, S);
+  let seed = 7; const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const pts: { x: number; y: number }[][] = [];
+  for (let j = 0; j <= N; j++) { pts.push([]); for (let i = 0; i <= N; i++) { const edge = i === 0 || j === 0 || i === N || j === N; pts[j].push({ x: (i / N) * S + (edge ? 0 : (rnd() - 0.5) * (S / N) * 0.7), y: (j / N) * S + (edge ? 0 : (rnd() - 0.5) * (S / N) * 0.7) }); } }
+  const tri = (a: { x: number; y: number }, b: { x: number; y: number }, d: { x: number; y: number }) => {
+    const l = rnd(); g.fillStyle = l < 0.5 ? `rgba(255,255,255,${0.15 + l * 0.9})` : `rgba(0,10,40,${(l - 0.5) * 0.55})`;
+    g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.lineTo(d.x, d.y); g.closePath(); g.fill(); g.strokeStyle = 'rgba(255,255,255,.75)'; g.lineWidth = 1.6; g.stroke();
+  };
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) { const p = pts[j][i], q = pts[j][i + 1], r = pts[j + 1][i], t = pts[j + 1][i + 1]; if ((i + j) % 2) { tri(p, q, t); tri(p, t, r); } else { tri(p, q, r); tri(q, t, r); } }
+  crystalCache.set(color, c); return c;
+}
+
+/** Decorations of a transformed pokémon, placed relative to the sprite (which stands on the bottom of its box). */
+function FormOverlay({ form, w, h, tera }: { form: 'mega' | 'tera' | 'dyna'; w: number; h: number; tera?: string }) {
+  if (form === 'tera') return (
+    <svg className="tera-crown" viewBox="0 0 120 80" style={{ width: Math.max(56, w * 0.46), bottom: h * 0.86, '--tera': tera } as React.CSSProperties} aria-hidden>
+      <polygon points="60,2 74,34 60,46 46,34" fill={tera} /><polygon points="60,2 74,34 60,20" fill="#fff" opacity=".55" />
+      <polygon points="30,14 46,34 40,52 22,40" fill={tera} /><polygon points="30,14 46,34 34,32" fill="#fff" opacity=".45" />
+      <polygon points="90,14 98,40 80,52 74,34" fill={tera} /><polygon points="90,14 98,40 86,30" fill="#fff" opacity=".45" />
+      <polygon points="8,34 22,40 24,62 6,54" fill={tera} opacity=".9" /><polygon points="112,34 114,54 96,62 98,40" fill={tera} opacity=".9" />
+      <polygon points="22,40 40,52 60,46 80,52 98,40 96,62 60,76 24,62" fill={tera} /><polygon points="22,40 40,52 60,46 60,76 24,62" fill="#fff" opacity=".3" />
+      <polyline points="22,40 40,52 60,46 80,52 98,40" fill="none" stroke="#fff" strokeWidth="2" opacity=".8" />
+    </svg>
+  );
+  if (form === 'dyna') return <div className="dyna-clouds" style={{ width: w * 0.8, height: h * 0.26, bottom: h * 0.8 }} aria-hidden><i /><i /><i /><i /></div>;
+  return <div className="mega-mark" style={{ bottom: h * 0.9 }} aria-hidden><span>M</span></div>;
 }
 /** Start decoding + smoothing a battler's animation ahead of time. */
 export function preloadAnimated(id: number, shiny?: boolean) { void loadSmooth(animatedUrl(id, shiny)).catch(() => {}); }
