@@ -21,12 +21,13 @@
 ## 構成
 
 ```
-shared/   ゲームロジック（型・タイプ相性・技・ダメージ計算・ターン解決・捕獲判定・経験値・エリア・通信プロトコル）
-server/   Node + express + ws。レイド部屋・交換部屋の管理、ラウンド解決（サーバー権威）、ビルド済みクライアントの配信
+shared/   ゲームロジック（型・タイプ相性・技・ダメージ計算・ターン解決・捕獲判定・経験値・エリア・通信プロトコル・部屋の管理 hub.ts）
+server/   Node + express + ws。shared の部屋管理（RoomHub）を WebSocket で公開し、ビルド済みクライアントも配信（任意）
 client/   Vite + React + TypeScript の PWA（manifest / service worker つき）
 ```
 
-- ソロバトルはクライアント内で `shared` のエンジンを直接実行、みんなでバトルはサーバーが同じエンジンでラウンドを解決し、イベント列をクライアントが演出として再生します。
+- ソロバトルはクライアント内で `shared` のエンジンを直接実行します。
+- こうかん・みんなでバトルの部屋は `shared/src/hub.ts` の RoomHub が管理します。**サーバーがあれば** サーバーが部屋を持ち、**無ければ**（GitHub Pages だけの公開）部屋を作った人のブラウザが RoomHub を動かし、ともだちは WebRTC で直接つながります（`client/src/p2p.ts`）。つなぐ相手を見つけるのには PeerJS の無料公開ブローカー（0.peerjs.com）を使い、厳しいモバイル回線向けの中継（TURN）も PeerJS の既定設定に含まれています。部屋コードがそのままホストの ID なので、6けたのコードだけで参加できます。P2P では部屋を作った人が部屋を出ると部屋は終わります（こうかん成立後やバトル終了後は、相手が結果を見終わるまで裏で部屋を保ちます）。
 - ポケモンのデータ（名前・タイプ・種族値・捕獲率）は [PokéAPI](https://pokeapi.co/) から取得して `shared/src/data/pokemon.data.ts` に同梱。公式アートはランタイムに PokéAPI の sprites リポジトリから読み込みます（リポジトリには画像を含めていません）。
 - 手持ち・ずかん・ともだち・戦績は端末の localStorage に保存されます。
 
@@ -59,12 +60,12 @@ docker run -p 8787:8787 pkfriend
 
 | 先 | 内容 | 必要な設定 |
 | --- | --- | --- |
-| **GitHub Pages** | PWA クライアントを `https://<owner>.github.io/<repo>/` に配信。たんけん・ボックス・ずかんはこれだけで遊べる | 初回のみ **Settings → Pages → Source: Deploy from a branch → `gh-pages` / (root)** を選ぶ（成果物は毎回ワークフローが `gh-pages` ブランチへ自動 push） |
+| **GitHub Pages** | PWA クライアントを `https://<owner>.github.io/<repo>/` に配信。**これだけで全機能が遊べる**（こうかん・みんなでバトルはブラウザどうしの P2P） | 初回のみ **Settings → Pages → Source: Deploy from a branch → `gh-pages` / (root)** を選ぶ（成果物は毎回ワークフローが `gh-pages` ブランチへ自動 push） |
 | **GHCR** | サーバー入りコンテナ `ghcr.io/<owner>/pkfriend:latest` を公開。VPS や他の PaaS から pull できる | なし |
-| **Fly.io** | サーバー本体（WebSocket）＋クライアントを `https://<repo>-<owner>.fly.dev` で公開。こうかん・みんなでバトルはこれで動く | Secrets に `FLY_API_TOKEN` |
+| **Fly.io**（任意） | サーバー本体（WebSocket）＋クライアントを `https://<repo>-<owner>.fly.dev` で公開。設定すると部屋をサーバーが持つので、部屋を作った人が抜けても部屋が続く | Secrets に `FLY_API_TOKEN` |
 | **Render** | Render 側の再デプロイを起動 | Secrets に `RENDER_DEPLOY_HOOK_URL`（`render.yaml` で Blueprint 作成後に取得） |
 
-Pages 版のクライアントは、ビルド時に Fly のアドレス（`wss://<repo>-<owner>.fly.dev/ws`）をサーバーとして埋め込みます。Fly を使わず別のサーバーにつなぐ場合は、リポジトリの **Variables** に `PUBLIC_WS_URL`（例: `wss://example.com/ws`）を設定してください。Fly のアプリ名を変えたいときは Variables の `FLY_APP_NAME`、組織を変えるときは `FLY_ORG` を設定します。
+Pages 版のクライアントは、`FLY_API_TOKEN` があれば Fly のアドレス（`wss://<repo>-<owner>.fly.dev/ws`）を、Variables に `PUBLIC_WS_URL`（例: `wss://example.com/ws`）があればそのサーバーを使い、どちらも無ければ P2P で動きます（サーバーにつながらないときも自動で P2P に切り替わります）。P2P の仲介を自前の [PeerJS Server](https://github.com/peers/peerjs-server) にしたいときは Variables に `PEER_HOST`（と必要なら `PEER_PORT`・`PEER_PATH`）を設定します。Fly のアプリ名を変えたいときは Variables の `FLY_APP_NAME`、組織を変えるときは `FLY_ORG` を設定します。
 
 ### 初回だけ必要な設定
 

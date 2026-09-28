@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getSpecies, displayName, type TradeRoomView, type OwnedPokemon } from '@pkfriend/shared';
 import { useStore } from '../store';
 import { useNet } from '../net';
@@ -9,7 +9,9 @@ import { toast } from '../toast';
 import { useBgm } from '../music';
 
 export function TradeRoom() {
-  const room = useNet(s => s.room) as TradeRoomView; const send = useNet(s => s.send); const leave = useNet(s => s.leave); const done = useNet(s => s.tradeDone); const clearTrade = useNet(s => s.clearTrade);
+  // keep showing the last room while the trade result is on screen, even if the room has closed meanwhile
+  const live = useNet(s => s.room); const last = useRef<TradeRoomView | null>(null); if (live?.kind === 'trade') last.current = live;
+  const room = last.current!; const send = useNet(s => s.send); const leave = useNet(s => s.leave); const done = useNet(s => s.tradeDone); const clearTrade = useNet(s => s.clearTrade);
   const player = useStore(s => s.player)!; const box = useStore(s => s.box);
   const [picker, setPicker] = useState(false); const [stage, setStage] = useState<0 | 1 | 2>(0);
   useBgm(done ? 'result' : 'home');

@@ -1,13 +1,18 @@
-import type { WebSocket } from 'ws';
-import {
-  type Player, type OwnedPokemon, type Battler, type BattleState, type BattleAction, type BattleEvent,
-  type BattleRoomView, type TradeRoomView, type RoomMember, type ServerMsg,
-  makeRng, randomSeed, getSpecies, wildBattler, battlerFromOwned, newBattle, resolveRound, bossActions,
-  rollCatchBall, bestBall, createOwned, expGain, bossPool, pick, ROUND_SECONDS, MAX_RAID_MEMBERS,
-  type BallKind, type SpecialKind,
-} from '@pkfriend/shared';
+// Multiplayer rooms (みんなでバトル / こうかん) and the message handling around them.
+// Transport-agnostic: the Node server runs it over WebSocket, and in the browser the player who
+// creates a room runs it and friends connect peer-to-peer (see client/src/p2p.ts).
+import type { Player, OwnedPokemon, Battler, BattleState, BattleAction, BattleEvent, SpecialKind } from './types.js';
+import type { BattleRoomView, TradeRoomView, RoomMember, ServerMsg, ClientMsg } from './protocol.js';
+import { ROUND_SECONDS, MAX_RAID_MEMBERS } from './protocol.js';
+import { makeRng, randomSeed, pick } from './rng.js';
+import { getSpecies, createOwned, expGain } from './species.js';
+import { wildBattler, battlerFromOwned, newBattle, resolveRound, bossActions } from './battle.js';
+import { rollCatchBall, bestBall, type BallKind } from './catch.js';
+import { bossPool } from './areas.js';
 
-export interface Client { ws: WebSocket; player: Player; roomCode: string | null; }
+/** One connection to a player (a WebSocket, a WebRTC data channel, or an in-page loopback). */
+export interface Conn { send(data: string): void; readonly open: boolean; }
+export interface Client { conn: Conn; player: Player; roomCode: string | null; }
 
 const ROOM_TTL_MS = 30 * 60 * 1000;
 
@@ -17,8 +22,8 @@ abstract class Room {
   abstract kind: 'battle' | 'trade';
   abstract view(): BattleRoomView | TradeRoomView;
   touch() { this.lastActivity = Date.now(); }
-  memberViews(): RoomMember[] { return [...this.members.values()].map(m => ({ player: m.client.player, ready: m.ready, connected: m.client.ws.readyState === 1 })); }
-  send(c: Client, msg: ServerMsg) { if (c.ws.readyState === 1) c.ws.send(JSON.stringify(msg)); }
+  memberViews(): RoomMember[] { return [...this.members.values()].map(m => ({ player: m.client.player, ready: m.ready, connected: m.client.conn.open })); }
+  send(c: Client, msg: ServerMsg) { if (c.conn.open) c.conn.send(JSON.stringify(msg)); }
   broadcast(msg: ServerMsg) { for (const m of this.members.values()) this.send(m.client, msg); }
   sync() { this.broadcast({ t: 'room', room: this.view() }); }
   abstract canJoin(): string | null;
@@ -230,19 +235,58 @@ export class TradeRoom extends Room {
   remove(c: Client) { super.remove(c); this.offers.delete(c.player.id); for (const o of this.offers.values()) o.confirmed = false; this.sync(); }
 }
 
-// ---------------------------------------------------------------- registry
-const rooms = new Map<string, BattleRoom | TradeRoom>();
+// ---------------------------------------------------------------- hub (registry + message handling)
 const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-function newCode(): string {
-  for (;;) { let c = ''; for (let i = 0; i < 6; i++) c += ALPHABET[Math.floor(Math.random() * ALPHABET.length)]; if (!rooms.has(c)) return c; }
+export const sanitizePlayer = (p: Player): Player => ({ id: String(p?.id ?? '').slice(0, 40), name: String(p?.name || 'トレーナー').slice(0, 16), avatarSpeciesId: Number(p?.avatarSpeciesId) || 25 });
+
+export class RoomHub {
+  rooms = new Map<string, BattleRoom | TradeRoom>();
+  newCode(): string { for (;;) { let c = ''; for (let i = 0; i < 6; i++) c += ALPHABET[Math.floor(Math.random() * ALPHABET.length)]; if (!this.rooms.has(c)) return c; } }
+  createRoom(host: Client, kind: 'battle' | 'trade', difficulty?: 1 | 2 | 3, bossSpeciesId?: number, code = this.newCode()) {
+    const room = kind === 'battle' ? new BattleRoom(code, host, difficulty, bossSpeciesId) : new TradeRoom(code, host);
+    this.rooms.set(code, room); return room;
+  }
+  getRoom(code: string) { return this.rooms.get(String(code).toUpperCase().trim()); }
+  deleteIfEmpty(room: BattleRoom | TradeRoom) { if (room.empty) { room.dispose(); this.rooms.delete(room.code); } }
+  sweep() { const now = Date.now(); for (const r of this.rooms.values()) if (r.empty || now - r.lastActivity > ROOM_TTL_MS) { r.dispose(); this.rooms.delete(r.code); } }
+  get count() { return this.rooms.size; }
+
+  private reply(c: Client, msg: ServerMsg) { if (c.conn.open) c.conn.send(JSON.stringify(msg)); }
+
+  /** Handle one message from a connection. `client` is null until the connection said hello. Returns the (new) client. */
+  handle(conn: Conn, client: Client | null, msg: ClientMsg, opts: { code?: string } = {}): Client | null {
+    if (msg.t === 'ping') { conn.open && conn.send(JSON.stringify({ t: 'pong' } satisfies ServerMsg)); return client; }
+    if (msg.t === 'hello') { const p = sanitizePlayer(msg.player); if (client) { client.player = p; return client; } return { conn, player: p, roomCode: null }; }
+    if (!client) { conn.open && conn.send(JSON.stringify({ t: 'error', message: 'まず hello を おくってください' } satisfies ServerMsg)); return client; }
+    const room = client.roomCode ? this.getRoom(client.roomCode) : undefined;
+    switch (msg.t) {
+      case 'create_room': {
+        if (room) { room.remove(client); this.deleteIfEmpty(room); }
+        const r = this.createRoom(client, msg.kind, msg.difficulty, msg.bossSpeciesId, opts.code);
+        r.add(client); r.sync(); break;
+      }
+      case 'join_room': {
+        const r = this.getRoom(msg.code);
+        if (!r) { this.reply(client, { t: 'error', message: 'そのコードの へやは みつかりません' }); break; }
+        if (room && room !== r) { room.remove(client); this.deleteIfEmpty(room); }
+        if (r.members.has(client.player.id)) { r.members.get(client.player.id)!.client = client; client.roomCode = r.code; r.sync(); break; }
+        const why = r.canJoin(); if (why) { this.reply(client, { t: 'error', message: why }); break; }
+        r.add(client); r.sync(); break;
+      }
+      case 'leave_room': { if (room) { room.remove(client); this.deleteIfEmpty(room); } this.reply(client, { t: 'left' }); break; }
+      case 'battle_select': { if (room instanceof BattleRoom) room.select(client, msg.pokemon); break; }
+      case 'battle_start': { if (room instanceof BattleRoom) room.start(client); break; }
+      case 'battle_action': { if (room instanceof BattleRoom) room.action(client, msg.moveId, msg.roulette, msg.special); break; }
+      case 'catch_attempt': { if (room instanceof BattleRoom) room.catchAttempt(client, msg.ball); break; }
+      case 'emote': { if (room) room.broadcast({ t: 'emote', playerId: client.player.id, playerName: client.player.name, emote: String(msg.emote).slice(0, 8) }); break; }
+      case 'trade_offer': { if (room instanceof TradeRoom) room.offer(client, msg.pokemon); break; }
+      case 'trade_confirm': { if (room instanceof TradeRoom) room.confirm(client, msg.confirmed); break; }
+    }
+    return client;
+  }
+  /** A connection went away. */
+  disconnect(client: Client | null) {
+    if (!client) return; const room = client.roomCode ? this.getRoom(client.roomCode) : undefined;
+    if (room) { room.remove(client); this.deleteIfEmpty(room); }
+  }
 }
-export function createRoom(host: Client, kind: 'battle' | 'trade', difficulty?: 1 | 2 | 3, bossSpeciesId?: number) {
-  const code = newCode();
-  const room = kind === 'battle' ? new BattleRoom(code, host, difficulty, bossSpeciesId) : new TradeRoom(code, host);
-  rooms.set(code, room);
-  return room;
-}
-export const getRoom = (code: string) => rooms.get(code.toUpperCase().trim());
-export function deleteIfEmpty(room: Room) { if (room.empty) { room.dispose(); rooms.delete(room.code); } }
-export function sweepRooms() { const now = Date.now(); for (const r of rooms.values()) if (r.empty || now - r.lastActivity > ROOM_TTL_MS) { r.dispose(); rooms.delete(r.code); } }
-export const roomCount = () => rooms.size;

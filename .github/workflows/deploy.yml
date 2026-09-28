@@ -1,7 +1,8 @@
 name: Deploy
 
 # main へ push されるたびに: テスト → ビルド → 配信 を全自動で行う
-#   1. GitHub Pages   : PWA クライアント（追加設定なし）
+#   1. GitHub Pages   : PWA クライアント（追加設定なし）。サーバーが無いときは こうかん・みんなでバトルを
+#                       ブラウザどうしの P2P（WebRTC）で動かすので、これだけで全機能が遊べる
 #   2. GHCR           : サーバー入りコンテナイメージ ghcr.io/<owner>/pkfriend（追加設定なし）
 #   3. Fly.io         : サーバー本体（Secrets に FLY_API_TOKEN を入れると有効）
 #   4. Render         : Secrets に RENDER_DEPLOY_HOOK_URL を入れると Render 側の再デプロイも起動
@@ -28,6 +29,7 @@ jobs:
     outputs:
       fly_app: ${{ steps.vars.outputs.fly_app }}
       ws_url: ${{ steps.vars.outputs.ws_url }}
+      net: ${{ steps.vars.outputs.net }}
       base: ${{ steps.vars.outputs.base }}
       has_fly: ${{ steps.vars.outputs.has_fly }}
       has_render: ${{ steps.vars.outputs.has_render }}
@@ -42,17 +44,21 @@ jobs:
           owner="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
           repo="$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')"
           app="${FLY_APP_OVERRIDE:-${repo}-${owner}}"
-          ws="${WS_URL_OVERRIDE:-wss://${app}.fly.dev/ws}"
+          # a game server exists only when Fly is configured or PUBLIC_WS_URL points at one; otherwise rooms run peer-to-peer
+          if [ -n "$WS_URL_OVERRIDE" ]; then ws="$WS_URL_OVERRIDE"; net=ws
+          elif [ -n "$FLY_TOKEN" ]; then ws="wss://${app}.fly.dev/ws"; net=ws
+          else ws=""; net=p2p; fi
           case "${{ github.event.repository.name }}" in
             *.github.io) base="/" ;;
             *) base="/${{ github.event.repository.name }}/" ;;
           esac
           echo "fly_app=$app"   >> "$GITHUB_OUTPUT"
           echo "ws_url=$ws"     >> "$GITHUB_OUTPUT"
+          echo "net=$net"       >> "$GITHUB_OUTPUT"
           echo "base=$base"     >> "$GITHUB_OUTPUT"
           echo "has_fly=$([ -n "$FLY_TOKEN" ] && echo true || echo false)"       >> "$GITHUB_OUTPUT"
           echo "has_render=$([ -n "$RENDER_HOOK" ] && echo true || echo false)"  >> "$GITHUB_OUTPUT"
-          echo "::notice::Fly app=$app  ws=$ws  pages base=$base  fly=$([ -n "$FLY_TOKEN" ] && echo on || echo off)"
+          echo "::notice::multiplayer=$net ${ws:+($ws)}  pages base=$base  fly=$([ -n "$FLY_TOKEN" ] && echo on || echo off)"
 
   # ---------------------------------------------------------------- 1. テスト & ビルド
   test:
@@ -122,6 +128,10 @@ jobs:
         env:
           VITE_BASE: ${{ needs.setup.outputs.base }}
           VITE_WS_URL: ${{ needs.setup.outputs.ws_url }}
+          VITE_NET: ${{ needs.setup.outputs.net }}
+          VITE_PEER_HOST: ${{ vars.PEER_HOST }}
+          VITE_PEER_PORT: ${{ vars.PEER_PORT }}
+          VITE_PEER_PATH: ${{ vars.PEER_PATH }}
           VITE_TTS_URL: ${{ vars.PUBLIC_TTS_URL }}
           VITE_TTS_SPEAKER: ${{ vars.PUBLIC_TTS_SPEAKER }}
         run: |
