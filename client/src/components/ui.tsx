@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { loadSmooth, frameAt, type SmoothAnim } from '../smoothsprite';
+import { loadHdList, hdEntry, hdUrl } from '../hdsprites';
 import { artworkUrl, animatedUrl, getSpecies, getMove, TYPE_COLOR, TYPE_JA, levelFromExp, displayName, expToNext, gradeOf, pokeEne, speedLevel, calcStats, SPECIAL_JA, type TypeName, type OwnedPokemon } from '@pkfriend/shared';
 import { useToast } from '../toast';
 
@@ -12,12 +13,29 @@ export function Sprite({ id, shiny, size = 96, className = '', silhouette = fals
 }
 
 /**
- * Animated battle sprite: the GIF keeps its natural proportions (a Pikachu stays smaller than a Charizard),
+ * Animated battle sprite: keeps its natural proportions (a Pikachu stays smaller than a Charizard),
  * scaled up to fill at most `box` px and anchored to the bottom of the box so it stands on the ground.
- * While the xBR-smoothed frames are being prepared the plain GIF is shown; if the GIF is missing the
- * static official artwork is used instead.
+ * Plays the AI-upscaled HD animation when the site has one; otherwise the GIF is smoothed at runtime
+ * (the plain GIF shows while that is prepared) and, if even the GIF is missing, the official artwork is used.
  */
-export function BattleSprite({ id, shiny, box, maxScale = 3.4, formId, form, tera }: { id: number; shiny?: boolean; box: number; maxScale?: number; formId?: number; form?: 'mega' | 'tera' | 'dyna'; tera?: string }) {
+export function BattleSprite(props: { id: number; shiny?: boolean; box: number; maxScale?: number; formId?: number; form?: 'mega' | 'tera' | 'dyna'; tera?: string }) {
+  const sid = props.formId ?? props.id;
+  const [, setReady] = useState(0);
+  const [hdFailed, setHdFailed] = useState<string | null>(null);
+  useEffect(() => { let alive = true; void loadHdList().then(() => alive && setReady(n => n + 1)); return () => { alive = false; }; }, []);
+  const hd = hdEntry(sid, props.shiny);
+  const hdKey = `${sid}:${props.shiny}`;
+  if (hd === undefined) return null; // HD list still loading (one small request, usually already cached)
+  // テラスタル draws crystal facets onto the frames, which needs the canvas player
+  if (hd && !props.tera && hdFailed !== hdKey) {
+    const { box, maxScale = 3.4, form } = props;
+    const k = Math.min((box * 0.94) / Math.max(hd.w, hd.h), maxScale); const cw = Math.round(hd.w * k), ch = Math.round(hd.h * k);
+    return <><img className="sprite ani hd" src={hdUrl(sid, props.shiny)} alt={getSpecies(props.id).ja} draggable={false} style={{ width: cw, height: ch }} onError={() => setHdFailed(hdKey)} />{form ? <FormOverlay form={form} w={cw} h={ch} /> : null}</>;
+  }
+  return <SmoothSprite {...props} />;
+}
+
+function SmoothSprite({ id, shiny, box, maxScale = 3.4, formId, form, tera }: { id: number; shiny?: boolean; box: number; maxScale?: number; formId?: number; form?: 'mega' | 'tera' | 'dyna'; tera?: string }) {
   const url = animatedUrl(formId ?? id, shiny);
   const [state, setState] = useState<{ url: string; failed: boolean; nat: { w: number; h: number } | null; anim: SmoothAnim | null }>({ url, failed: false, nat: null, anim: null });
   const st = state.url === url ? state : { url, failed: false, nat: null, anim: null };
@@ -97,8 +115,10 @@ function FormOverlay({ form, w, h, tera }: { form: 'mega' | 'tera' | 'dyna'; w: 
   if (form === 'dyna') return <div className="dyna-clouds" style={{ width: w * 0.8, height: h * 0.26, bottom: h * 0.8 }} aria-hidden><i /><i /><i /><i /></div>;
   return <div className="mega-mark" style={{ bottom: h * 0.9 }} aria-hidden><span>M</span></div>;
 }
-/** Start decoding + smoothing a battler's animation ahead of time. */
-export function preloadAnimated(id: number, shiny?: boolean) { void loadSmooth(animatedUrl(id, shiny)).catch(() => {}); }
+/** Fetch a battler's animation ahead of time (the HD file, or decode + smooth the GIF when there is none). */
+export function preloadAnimated(id: number, shiny?: boolean) {
+  void loadHdList().then(() => { if (hdEntry(id, shiny)) { const im = new Image(); im.src = hdUrl(id, shiny); } else void loadSmooth(animatedUrl(id, shiny)).catch(() => {}); });
+}
 
 export function TypeBadge({ t }: { t: TypeName }) { return <span className="pill" style={{ background: TYPE_COLOR[t] }}>{TYPE_JA[t]}</span>; }
 export function Types({ id }: { id: number }) { return <span className="row" style={{ gap: 4 }}>{getSpecies(id).types.map(t => <TypeBadge key={t} t={t} />)}</span>; }
