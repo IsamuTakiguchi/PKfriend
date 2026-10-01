@@ -74,11 +74,50 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  # ---------------------------------------------------------------- 1b. HD battle sprites
+  # Every frame of the animated sprites upscaled 4x with an anime AI model (CPU). Split into 8 parallel jobs
+  # (~25 min the first time); each part is cached until scripts/hd-sprites.py changes.
+  hd-sprites:
+    if: vars.HD_SPRITES_DISABLED != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - id: key
+        run: echo "key=hd-sprites-$(sha1sum scripts/hd-sprites.py | cut -c1-12)-${{ matrix.shard }}of8" >> "$GITHUB_OUTPUT"
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: out
+          key: ${{ steps.key.outputs.key }}
+      - uses: actions/setup-python@v5
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          python-version: '3.12'
+      - name: Build HD sprites (part ${{ matrix.shard }} of 8)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --quiet pillow numpy
+          curl -fsSL -o "$RUNNER_TEMP/model.pth" https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.2.4/RealESRGAN_x4plus_anime_6B.pth
+          python scripts/hd-sprites.py --model "$RUNNER_TEMP/model.pth" --out out --ids 1-151 --forms --shard ${{ matrix.shard }}/8
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hd-sprites-${{ matrix.shard }}
+          path: out
+          retention-days: 3
+
   # ---------------------------------------------------------------- 2. GitHub Pages (PWA クライアント)
   # 成果物を gh-pages ブランチに push する方式。公開リポジトリなら Pages が自動で有効になり
   # https://<owner>.github.io/<repo>/ で配信される（Settings で有効化する操作は不要）。
   pages:
-    needs: [setup, test]
+    needs: [setup, test, hd-sprites]
+    if: ${{ !cancelled() && needs.test.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -124,33 +163,26 @@ jobs:
       - name: Voice bank summary
         run: |
           if [ -f client/public/voice/manifest.json ]; then echo "::notice::voice bank: $(ls client/public/voice | wc -l) files, $(du -sh client/public/voice | cut -f1)"; else echo "::warning::no voice bank (falls back to the device's speech synthesis)"; fi
-      # ---- HD battle sprites: every animation frame upscaled 4x with an anime-video AI model (CPU, ~30 min once),
-      #      then reused from the cache until scripts/hd-sprites.py changes. If it fails the app smooths at runtime.
-      - name: HD sprite cache key
-        id: hkey
-        run: echo "key=hd-sprites-$(sha1sum scripts/hd-sprites.py | cut -c1-12)" >> "$GITHUB_OUTPUT"
-      - name: Restore HD sprites
-        id: hcache
-        uses: actions/cache@v4
-        with:
-          path: client/public/sprites/hd
-          key: ${{ steps.hkey.outputs.key }}
-      - uses: actions/setup-python@v5
-        if: steps.hcache.outputs.cache-hit != 'true' && vars.HD_SPRITES_DISABLED != 'true'
-        with:
-          python-version: '3.12'
-      - name: Build HD sprites
-        if: steps.hcache.outputs.cache-hit != 'true' && vars.HD_SPRITES_DISABLED != 'true'
+      # ---- HD battle sprites (built by the hd-sprites job, 8 in parallel)
+      - name: Fetch HD sprites
+        uses: actions/download-artifact@v4
         continue-on-error: true
-        timeout-minutes: 90
+        with:
+          pattern: hd-sprites-*
+          path: client/public/sprites/hd
+          merge-multiple: true
+      - name: Merge HD sprite list
         run: |
-          python -m pip install --quiet torch --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install --quiet pillow numpy
-          curl -fsSL -o "$RUNNER_TEMP/realesr-animevideov3.pth" https://github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/realesr-animevideov3.pth
-          python scripts/hd-sprites.py --model "$RUNNER_TEMP/realesr-animevideov3.pth" --out client/public/sprites/hd --ids 1-151 --forms
-      - name: HD sprite summary
-        run: |
-          if [ -f client/public/sprites/hd/manifest.json ]; then echo "::notice::HD sprites: $(ls client/public/sprites/hd/*.webp | wc -l) files, $(du -sh client/public/sprites/hd | cut -f1)"; else echo "::warning::no HD sprites (the app smooths the small sprites at runtime)"; fi
+          cd client/public/sprites/hd 2>/dev/null || { echo "::warning::no HD sprites (the app smooths the small sprites at runtime)"; exit 0; }
+          python3 - <<'PY'
+          import glob, json
+          files = {}
+          for f in sorted(glob.glob('manifest-*.json')):
+              files.update(json.load(open(f)).get('files', {}))
+          json.dump({'version': 4, 'scale': 4, 'files': files}, open('manifest.json', 'w'))
+          print(f'::notice::HD sprites: {len(files)}')
+          PY
+          rm -f manifest-*.json
       - name: Build client for Pages
         env:
           VITE_BASE: ${{ needs.setup.outputs.base }}

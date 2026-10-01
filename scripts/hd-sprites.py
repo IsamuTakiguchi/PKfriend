@@ -3,10 +3,11 @@
 
 The animated battle sprites (PokeAPI "showdown" GIFs) are tiny (Pikachu is 60x60), so enlarging them on a
 phone looks rough and the edges flicker from frame to frame. This script upscales every frame 4x with
-Real-ESRGAN's anime-video model (realesr-animevideov3 — small, CPU friendly, made for cel-shaded video so
-it stays stable between frames) and writes an animated WebP per sprite that the app plays directly.
+Real-ESRGAN's anime model (RealESRGAN_x4plus_anime_6B — crisp, clean line art; it measured as stable between
+frames as the video model, which looked soft) and writes an animated WebP per sprite that the app plays directly.
+The compact video model (realesr-animevideov3) is still accepted for a faster, softer build.
 
-usage: hd-sprites.py --model realesr-animevideov3.pth --out client/public/sprites/hd --ids 1-151 [--forms]
+usage: hd-sprites.py --model RealESRGAN_x4plus_anime_6B.pth --out client/public/sprites/hd --ids 1-151 [--forms] [--shard 0/8]
 """
 import argparse, io, json, os, sys, time, urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -19,7 +20,7 @@ from PIL import Image, ImageSequence
 GIF_URL = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/{shiny}{id}.gif'
 FORMS = [10033, 10034, 10035, 10036, 10090, 10073, 10037, 10071, 10038, 10039, 10040, 10041, 10042, 10043, 10044,  # mega
          10195, 10196, 10197, 10198, 10199, 10200, 10201, 10202, 10203, 10204, 10205, 10206]                        # gigantamax
-PIPELINE_VERSION = 3
+PIPELINE_VERSION = 4
 
 
 class SRVGGNetCompact(nn.Module):
@@ -41,10 +42,49 @@ class SRVGGNetCompact(nn.Module):
         return self.upsampler(out) + F.interpolate(x, scale_factor=self.upscale, mode='nearest')
 
 
+class RDB(nn.Module):
+    def __init__(self, nf=64, gc=32):
+        super().__init__()
+        self.conv1 = nn.Conv2d(nf, gc, 3, 1, 1); self.conv2 = nn.Conv2d(nf + gc, gc, 3, 1, 1); self.conv3 = nn.Conv2d(nf + 2 * gc, gc, 3, 1, 1)
+        self.conv4 = nn.Conv2d(nf + 3 * gc, gc, 3, 1, 1); self.conv5 = nn.Conv2d(nf + 4 * gc, nf, 3, 1, 1); self.lrelu = nn.LeakyReLU(0.2, True)
+
+    def forward(self, x):
+        x1 = self.lrelu(self.conv1(x)); x2 = self.lrelu(self.conv2(torch.cat((x, x1), 1))); x3 = self.lrelu(self.conv3(torch.cat((x, x1, x2), 1)))
+        x4 = self.lrelu(self.conv4(torch.cat((x, x1, x2, x3), 1)))
+        return self.conv5(torch.cat((x, x1, x2, x3, x4), 1)) * 0.2 + x
+
+
+class RRDB(nn.Module):
+    def __init__(self, nf=64):
+        super().__init__(); self.rdb1 = RDB(nf); self.rdb2 = RDB(nf); self.rdb3 = RDB(nf)
+
+    def forward(self, x):
+        return self.rdb3(self.rdb2(self.rdb1(x))) * 0.2 + x
+
+
+class RRDBNet(nn.Module):
+    """Real-ESRGAN x4plus network (6 blocks for the anime model)."""
+    def __init__(self, num_block=6, nf=64):
+        super().__init__()
+        self.conv_first = nn.Conv2d(3, nf, 3, 1, 1); self.body = nn.Sequential(*[RRDB(nf) for _ in range(num_block)]); self.conv_body = nn.Conv2d(nf, nf, 3, 1, 1)
+        self.conv_up1 = nn.Conv2d(nf, nf, 3, 1, 1); self.conv_up2 = nn.Conv2d(nf, nf, 3, 1, 1); self.conv_hr = nn.Conv2d(nf, nf, 3, 1, 1)
+        self.conv_last = nn.Conv2d(nf, 3, 3, 1, 1); self.lrelu = nn.LeakyReLU(0.2, True)
+
+    def forward(self, x):
+        f = self.conv_first(x); f = f + self.conv_body(self.body(f))
+        f = self.lrelu(self.conv_up1(F.interpolate(f, scale_factor=2, mode='nearest')))
+        f = self.lrelu(self.conv_up2(F.interpolate(f, scale_factor=2, mode='nearest')))
+        return self.conv_last(self.lrelu(self.conv_hr(f)))
+
+
 def load_model(path):
-    m = SRVGGNetCompact()
     sd = torch.load(path, map_location='cpu')
-    sd = sd.get('params', sd.get('params_ema', sd))
+    sd = sd.get('params_ema', sd.get('params', sd))
+    if 'conv_first.weight' in sd:
+        blocks = 1 + max(int(k.split('.')[1]) for k in sd if k.startswith('body.'))
+        m = RRDBNet(num_block=blocks)
+    else:
+        m = SRVGGNetCompact()
     m.load_state_dict(sd, strict=True)
     return m.eval()
 
@@ -77,7 +117,7 @@ def bleed(rgba, px=6):
 
 
 @torch.inference_mode()
-def upscale(model, frames, pad=4, batch=12):
+def upscale(model, frames, pad=4, batch=6):
     """frames: list of HxWx4 uint8 -> list of (4H)x(4W)x4 uint8."""
     arr = np.stack([bleed(f) for f in frames]).astype(np.float32) / 255.0          # N,H,W,4
     arr = np.pad(arr, ((0, 0), (pad, pad), (pad, pad), (0, 0)), mode='edge')
@@ -97,7 +137,7 @@ def upscale(model, frames, pad=4, batch=12):
     return [(f * 255 + 0.5).astype(np.uint8) for f in y]
 
 
-MAX_SIDE = 340  # the battle box is at most ~300 CSS px, so big sprites do not need the full 4x
+MAX_SIDE = 480  # the battle box is at most ~300 CSS px, so big sprites do not need the full 4x
 
 
 def save_webp(frames, durs, path, quality):
@@ -107,7 +147,7 @@ def save_webp(frames, durs, path, quality):
         k = MAX_SIDE / max(w, h); size = (round(w * k), round(h * k))
         ims = [im.resize(size, Image.LANCZOS) for im in ims]
     ims[0].save(path, 'WEBP', save_all=True, append_images=ims[1:], duration=durs, loop=0,
-                quality=quality, alpha_quality=70, method=6, allow_mixed=False)
+                quality=quality, alpha_quality=85, method=6, allow_mixed=False)
 
 
 def fetch(url, tries=3):
@@ -138,7 +178,8 @@ def main():
     ap.add_argument('--ids', default='1-151')
     ap.add_argument('--forms', action='store_true')
     ap.add_argument('--shiny', action='store_true', help='also build shiny sprites')
-    ap.add_argument('--quality', type=int, default=70)
+    ap.add_argument('--quality', type=int, default=80)
+    ap.add_argument('--shard', default='0/1', help='i/n: build only every n-th sprite starting at i (parallel CI jobs)')
     ap.add_argument('--threads', type=int, default=0)
     args = ap.parse_args()
     if args.threads:
@@ -147,7 +188,9 @@ def main():
     model = load_model(args.model)
     ids = parse_ids(args.ids) + (FORMS if args.forms else [])
     jobs = [(i, '') for i in ids] + ([(i, 'shiny/') for i in ids] if args.shiny else [])
-    manifest_path = os.path.join(args.out, 'manifest.json')
+    si, sn = (int(x) for x in args.shard.split('/'))
+    jobs = jobs[si::sn]
+    manifest_path = os.path.join(args.out, 'manifest.json' if sn == 1 else f'manifest-{si}.json')
     manifest = {'version': PIPELINE_VERSION, 'scale': 4, 'files': {}}
     if os.path.exists(manifest_path):
         old = json.load(open(manifest_path))
