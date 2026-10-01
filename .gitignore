@@ -5,3 +5,4 @@ dist/
 .env
 client/public/voice/
 client/public/sprites/hd/
+__pycache__/
