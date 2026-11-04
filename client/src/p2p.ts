@@ -4,20 +4,32 @@
 // The room code doubles as the host's peer id, so a friend only needs the 6-character code.
 import type { Peer as PeerT, DataConnection } from 'peerjs';
 import { RoomHub, type Client, type Conn, type ClientMsg, type ServerMsg, type Player } from '@pkfriend/shared';
+import { toast } from './toast';
 
 const PREFIX = 'pkfriend-v1-';
 const ENV = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {};
 /** Broker: PeerJS's free public server by default, or a self-hosted `peer` server via VITE_PEER_HOST etc. */
 const BROKER = ENV.VITE_PEER_HOST ? { host: ENV.VITE_PEER_HOST, port: Number(ENV.VITE_PEER_PORT || 443), path: ENV.VITE_PEER_PATH || '/', secure: ENV.VITE_PEER_SECURE !== 'false' } : {};
-const CONNECT_TIMEOUT = 12_000;
+const CONNECT_TIMEOUT = 15_000;
+const JOIN_TRIES = 3;                         // a phone that was just in another app needs a moment to come back
+/** STUN finds each phone's public address; TURN relays the data when two networks cannot reach each other
+ *  directly (common on mobile data). PeerJS's free TURN is kept, and our own can be added via VITE_TURN_*. */
+const TURN_URLS = (ENV.VITE_TURN_URLS || '').split(',').map(u => u.trim()).filter(Boolean);
+const ICE_SERVERS: RTCIceServer[] = [
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  ...(TURN_URLS.length ? [{ urls: TURN_URLS, username: ENV.VITE_TURN_USER, credential: ENV.VITE_TURN_CRED }] : []),
+  { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+];
+const OPTS = { debug: 0, ...BROKER, config: { iceServers: ICE_SERVERS } };
 type PeerErr = Error & { type?: string };
+type DialResult = 'open' | 'unavailable' | 'failed';
 
 let PeerCtor: typeof PeerT | null = null;
 async function loadPeer(): Promise<typeof PeerT> { if (!PeerCtor) PeerCtor = (await import('peerjs')).Peer; return PeerCtor; }
 
 function openPeer(Peer: typeof PeerT, id?: string): Promise<PeerT> {
   return new Promise((resolve, reject) => {
-    const p = id ? new Peer(id, { debug: 0, ...BROKER }) : new Peer({ debug: 0, ...BROKER });
+    const p = id ? new Peer(id, OPTS) : new Peer(OPTS);
     const t = setTimeout(() => { p.destroy(); reject(Object.assign(new Error('timeout'), { type: 'network' })); }, CONNECT_TIMEOUT);
     p.once('open', () => { clearTimeout(t); resolve(p); });
     p.once('error', e => { clearTimeout(t); p.destroy(); reject(e); });
@@ -36,9 +48,17 @@ export class P2PNet {
   private player: Player | null = null;
   /** finished rooms we left but keep serving until the others have seen their results */
   private retired: { hub: RoomHub; peer: PeerT; links: Set<DataConnection>; until: number }[] = [];
+  private joinSeq = 0;                        // bumped to cancel a join that is still dialling
+  private pendingDial: ((r: DialResult) => void) | null = null;
 
   constructor(private deliver: (m: ServerMsg) => void, private status: (s: 'offline' | 'connecting' | 'online') => void) {
     this.selfConn = { open: true, send: d => queueMicrotask(() => this.deliver(JSON.parse(d) as ServerMsg)) };
+    // Phones drop the broker connection while the app is in the background (e.g. while sending the code by
+    // LINE). Reconnect right away when it comes back, so the room can be found again.
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', () => {
+      if (document.hidden) return;
+      for (const p of [this.base, this.hostPeer]) if (p && !p.destroyed && p.disconnected) { try { p.reconnect(); } catch { /* retried on 'disconnected' */ } }
+    });
   }
 
   /** Connect to the broker (so the app shows オンライン and can dial rooms). */
@@ -54,7 +74,7 @@ export class P2PNet {
     } catch { this.base = null; this.status('offline'); setTimeout(() => void this.start(), 5000); }
   }
   private onBaseError(e: PeerErr) {
-    if (e.type === 'peer-unavailable') { this.link = null; this.deliver({ t: 'error', message: 'そのコードの へやは みつかりません' }); this.deliver({ t: 'left' }); }
+    if (e.type === 'peer-unavailable') { if (this.pendingDial) this.pendingDial('unavailable'); }
     else if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') this.status('connecting');
   }
 
@@ -87,7 +107,7 @@ export class P2PNet {
     this.self = hub.handle(this.selfConn, null, { t: 'hello', player: this.player });
     hub.handle(this.selfConn, this.self, { t: 'create_room', kind: m.kind, difficulty: m.difficulty, bossSpeciesId: m.bossSpeciesId }, { code });
     peer.on('connection', dc => this.accept(dc));
-    peer.on('disconnected', () => setTimeout(() => peer && !peer.destroyed && peer.reconnect(), 1500)); // stay reachable for late joiners
+    peer.on('disconnected', () => setTimeout(() => { if (peer && !peer.destroyed && peer.disconnected) try { peer.reconnect(); } catch { /* next visibilitychange */ } }, 1500)); // stay reachable for late joiners
   }
   private accept(dc: DataConnection) {
     const hub = this.hub; if (!hub) { dc.close(); return; }
@@ -111,12 +131,51 @@ export class P2PNet {
     if (this.hub && this.hostCode === code && this.self) { this.hub.handle(this.selfConn, this.self, { t: 'join_room', code }); return; }
     if (!this.player) return;
     this.leave(true);
-    await this.start(); const base = this.base; if (!base) { this.deliver({ t: 'error', message: 'オフラインです' }); return; }
-    const dc = base.connect(PREFIX + code, { reliable: true }); this.link = dc;
-    const timer = setTimeout(() => { if (!dc.open && this.link === dc) { this.link = null; dc.close(); this.deliver({ t: 'error', message: 'へやに つながりませんでした' }); } }, CONNECT_TIMEOUT);
-    dc.on('open', () => { clearTimeout(timer); dc.send(JSON.stringify({ t: 'hello', player: this.player })); dc.send(JSON.stringify({ t: 'join_room', code })); });
-    dc.on('data', raw => { let msg: ServerMsg; try { msg = JSON.parse(String(raw)); } catch { return; } this.deliver(msg); });
-    dc.on('close', () => { clearTimeout(timer); if (this.link === dc) { this.link = null; this.deliver({ t: 'error', message: 'ホストとの つうしんが きれました' }); this.deliver({ t: 'left' }); } });
+    const my = ++this.joinSeq;
+    let result: DialResult = 'failed';
+    for (let i = 0; i < JOIN_TRIES; i++) {
+      if (i > 0) { toast('もういちど つないでいます…'); await new Promise(r => setTimeout(r, 2000)); }
+      if (my !== this.joinSeq) return;
+      const base = await this.ready();
+      if (my !== this.joinSeq) return;
+      if (!base) { this.deliver({ t: 'error', message: 'インターネットに つながっていません' }); return; }
+      result = await this.dial(base, code);
+      if (my !== this.joinSeq || result === 'open') return;
+    }
+    this.deliver({ t: 'error', message: result === 'unavailable'
+      ? 'そのコードの へやは みつかりません。コードと、つくった人が へやの がめんを ひらいているかを たしかめてね'
+      : 'へやに つながりませんでした。つくった人に アプリを ひらいたまま まってもらって、もういちど ためしてね' });
+    this.deliver({ t: 'left' });
+  }
+  /** The broker connection, (re)opened if the phone dropped it. */
+  private async ready(): Promise<PeerT | null> {
+    await this.start();
+    const b = this.base; if (!b || b.destroyed) return null;
+    if (b.open) return b;
+    if (b.disconnected) { try { b.reconnect(); } catch { /* wait below */ } }
+    await new Promise<void>(res => { const t = setTimeout(res, 8000); b.once('open', () => { clearTimeout(t); res(); }); });
+    return b.open ? b : null;
+  }
+  /** One attempt to reach the host's room. */
+  private dial(base: PeerT, code: string): Promise<DialResult> {
+    return new Promise(resolve => {
+      const dc = base.connect(PREFIX + code, { reliable: true }); this.link = dc;
+      let done = false;
+      const finish = (r: DialResult) => {
+        if (done) return; done = true; clearTimeout(timer); if (this.pendingDial === finish) this.pendingDial = null;
+        if (r !== 'open') { if (this.link === dc) this.link = null; try { dc.close(); } catch { /* ignore */ } }
+        resolve(r);
+      };
+      const timer = setTimeout(() => finish('failed'), CONNECT_TIMEOUT);
+      this.pendingDial = finish;
+      dc.on('open', () => { finish('open'); dc.send(JSON.stringify({ t: 'hello', player: this.player })); dc.send(JSON.stringify({ t: 'join_room', code })); });
+      dc.on('data', raw => { if (this.link !== dc) return; let msg: ServerMsg; try { msg = JSON.parse(String(raw)); } catch { return; } this.deliver(msg); });
+      dc.on('error', () => finish('failed'));
+      dc.on('close', () => {
+        if (!done) { finish('failed'); return; }
+        if (this.link === dc) { this.link = null; this.deliver({ t: 'error', message: 'ホストとの つうしんが きれました' }); this.deliver({ t: 'left' }); }
+      });
+    });
   }
 
   /** We leave a finished room (trade done / raid over) but keep serving it in the background so the others
@@ -137,6 +196,7 @@ export class P2PNet {
 
   /** Leave the current room (closing it for everyone when we are its host). */
   leave(silent = false) {
+    this.joinSeq++; this.pendingDial?.('failed');
     if (this.hub) {
       const room = this.hostCode ? this.hub.getRoom(this.hostCode) : undefined;
       const others = !!room && [...room.members.values()].some(m => m.client !== this.self);

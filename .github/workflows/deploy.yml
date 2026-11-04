@@ -191,6 +191,10 @@ jobs:
           VITE_PEER_HOST: ${{ vars.PEER_HOST }}
           VITE_PEER_PORT: ${{ vars.PEER_PORT }}
           VITE_PEER_PATH: ${{ vars.PEER_PATH }}
+          # 任意: モバイル回線どうしで つながりにくいときの中継（TURN）サーバー。例: turn:example.com:3478,turns:example.com:443
+          VITE_TURN_URLS: ${{ vars.TURN_URLS }}
+          VITE_TURN_USER: ${{ vars.TURN_USER }}
+          VITE_TURN_CRED: ${{ secrets.TURN_CRED }}
           VITE_TTS_URL: ${{ vars.PUBLIC_TTS_URL }}
           VITE_TTS_SPEAKER: ${{ vars.PUBLIC_TTS_SPEAKER }}
         run: |
