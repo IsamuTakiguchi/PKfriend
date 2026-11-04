@@ -13,6 +13,10 @@ export function Friends() {
   const player = useStore(s => s.player)!; const friends = useStore(s => s.friends);
   const [code, setCode] = useState(''); const [raid, setRaid] = useState(false); const [diff, setDiff] = useState<1 | 2 | 3>(1); const [boss, setBoss] = useState<number | undefined>(undefined);
 
+  // 全角→半角・小文字→大文字にし、英数字いがいを とりのぞく
+  const joinCode = code.normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+  const join = () => { if (joinCode.length < 6) return; unlockAudio(); sfx.select(); send({ t: 'join_room', code: joinCode }); };
+
   if (room?.kind === 'battle') return <RaidRoom />;
   if (room?.kind === 'trade' || (tradeDone && lastKind.current === 'trade')) return <TradeRoom />;
   const online = status === 'online';
@@ -24,8 +28,10 @@ export function Friends() {
 
       <div className="card stack">
         <h3>へやに さんかする</h3>
-        <div className="row"><input className="input" placeholder="6けたの コード" value={code} maxLength={6} style={{ textTransform: 'uppercase', letterSpacing: '.2em', fontWeight: 900 }} onChange={e => setCode(e.target.value.toUpperCase())} />
-          <button className="btn primary" disabled={!online || code.length < 6} onClick={() => { unlockAudio(); sfx.select(); send({ t: 'join_room', code }); }}>さんか</button></div>
+        {/* 入力中に値を書きかえると、スマホのキーボード（変換・予測入力中）で文字が二重に入るため、
+            入力はそのまま受けとり、表示は CSS で大文字に、送信時にだけ整える */}
+        <div className="row"><input className="input" placeholder="6けたの コード" value={code} maxLength={12} autoCapitalize="characters" autoCorrect="off" autoComplete="off" spellCheck={false} enterKeyHint="go" style={{ textTransform: 'uppercase', letterSpacing: '.2em', fontWeight: 900 }} onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && online && joinCode.length === 6) join(); }} />
+          <button className="btn primary" disabled={!online || joinCode.length < 6} onClick={join}>さんか</button></div>
         <p className="small muted" style={{ margin: 0 }}>ともだちの がめんに でている コードを いれてね。バトルの とちゅうでも さんせん できる！</p>
       </div>
 
