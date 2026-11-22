@@ -15,18 +15,23 @@ interface Net {
   joins: { battler: Battler; playerName: string; id: number }[];
   emotes: Emote[];
   tradeDone: TradeDone | null;
+  /** a join that is still connecting: shown on the フレンド screen so the button visibly reacts */
+  joining: { code: string; step: string } | null;
   connect: () => void;
   send: (m: ClientMsg) => void;
   shiftRound: () => void;
   clearJoin: (id: number) => void;
   clearTrade: () => void;
   leave: () => void;
+  cancelJoin: () => void;
 }
 
 let ws: WebSocket | null = null;
 let retry = 0;
 let seq = 0;
 let everOpened = false;
+let joinTimer: ReturnType<typeof setTimeout> | undefined;
+const setJoining = (j: Net['joining']) => { clearTimeout(joinTimer); useNet.setState({ joining: j }); };
 
 const ENV = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {};
 /** 'ws' = the Node server (same origin or VITE_WS_URL); 'p2p' = rooms run in the host player's browser.
@@ -43,7 +48,7 @@ function wsUrl() {
 export const netMode = () => mode;
 
 export const useNet = create<Net>((set, get) => ({
-  status: 'offline', room: null, rounds: [], joins: [], emotes: [], tradeDone: null,
+  status: 'offline', room: null, rounds: [], joins: [], emotes: [], tradeDone: null, joining: null,
   connect: () => {
     if (mode === 'p2p') { startP2P(); return; }
     if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
@@ -64,17 +69,28 @@ export const useNet = create<Net>((set, get) => ({
     ws.onmessage = ev => { let m: ServerMsg; try { m = JSON.parse(ev.data); } catch { return; } receive(m); };
   },
   send: m => {
-    if (mode === 'p2p') { startP2P(); p2p!.send(m); return; }
-    if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(m)); else if (m.t !== 'hello') toast('サーバーに せつぞく できていません', 'bad');
+    if (m.t === 'join_room') setJoining({ code: m.code, step: 'へやを さがしています…' });
+    if (mode === 'p2p') {
+      startP2P(); p2p!.send(m);
+      // safety net: the join normally ends with 'room' or 'error' well before this (3 tries of at most ~25 s)
+      if (m.t === 'join_room') joinTimer = setTimeout(() => { if (!useNet.getState().joining) return; p2p?.cancelJoin(); setJoining(null); toast('へやに つながりませんでした。もういちど ためしてね', 'bad'); }, 90000);
+      return;
+    }
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(m));
+      if (m.t === 'join_room') joinTimer = setTimeout(() => { setJoining(null); toast('へやに つながりませんでした。もういちど ためしてね', 'bad'); }, 20000);
+    } else if (m.t !== 'hello') { if (m.t === 'join_room') setJoining(null); toast('サーバーに せつぞく できていません', 'bad'); }
   },
   shiftRound: () => set(s => ({ rounds: s.rounds.slice(1) })),
   clearJoin: id => set(s => ({ joins: s.joins.filter(j => j.id !== id) })),
   clearTrade: () => set({ tradeDone: null }),
-  leave: () => { get().send({ t: 'leave_room' }); set({ room: null, rounds: [], joins: [], emotes: [] }); },
+  leave: () => { setJoining(null); get().send({ t: 'leave_room' }); set({ room: null, rounds: [], joins: [], emotes: [] }); },
+  cancelJoin: () => { setJoining(null); if (mode === 'p2p') p2p?.cancelJoin(); else if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ t: 'leave_room' })); },
 }));
 
 function receive(m: ServerMsg) {
   const set = useNet.setState;
+  if (m.t === 'room' || m.t === 'left' || m.t === 'error') setJoining(null);
   switch (m.t) {
     case 'room': set({ room: m.room }); break;
     case 'left': set({ room: null, rounds: [], joins: [], emotes: [] }); break;
@@ -96,7 +112,7 @@ function receive(m: ServerMsg) {
 }
 
 function startP2P() {
-  if (!p2p) p2p = new P2PNet(receive, status => useNet.setState({ status }));
+  if (!p2p) p2p = new P2PNet(receive, status => useNet.setState({ status }), step => { const j = useNet.getState().joining; if (j) useNet.setState({ joining: { ...j, step } }); });
   const p = useStore.getState().player; if (p) p2p.send({ t: 'hello', player: p });
   void p2p.start();
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { bossPool, getSpecies } from '@pkfriend/shared';
 import { useStore } from '../store';
 import { useNet, netMode } from '../net';
@@ -9,13 +9,18 @@ import { sfx, unlockAudio } from '../audio';
 
 export function Friends() {
   const room = useNet(s => s.room); const status = useNet(s => s.status); const send = useNet(s => s.send); const tradeDone = useNet(s => s.tradeDone);
+  const joining = useNet(s => s.joining); const cancelJoin = useNet(s => s.cancelJoin);
+  const [secs, setSecs] = useState(0);
+  useEffect(() => { setSecs(0); if (!joining) return; const t = setInterval(() => setSecs(n => n + 1), 1000); return () => clearInterval(t); }, [joining?.code, !!joining]);
   const lastKind = useRef<string | null>(null); if (room) lastKind.current = room.kind;
   const player = useStore(s => s.player)!; const friends = useStore(s => s.friends);
   const [code, setCode] = useState(''); const [raid, setRaid] = useState(false); const [diff, setDiff] = useState<1 | 2 | 3>(1); const [boss, setBoss] = useState<number | undefined>(undefined);
 
   // 全角→半角・小文字→大文字にし、英数字いがいを とりのぞく
   const joinCode = code.normalize('NFKC').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
-  const join = () => { if (joinCode.length < 6) return; unlockAudio(); sfx.select(); send({ t: 'join_room', code: joinCode }); };
+  // P2P ではボタンを押したときに通信サーバーへつなぎ直すので、「せつぞく中…」の間も押せるようにする
+  const canJoin = joinCode.length === 6 && !joining && (status === 'online' || netMode() === 'p2p');
+  const join = () => { if (!canJoin) return; unlockAudio(); sfx.select(); send({ t: 'join_room', code: joinCode }); };
 
   if (room?.kind === 'battle') return <RaidRoom />;
   if (room?.kind === 'trade' || (tradeDone && lastKind.current === 'trade')) return <TradeRoom />;
@@ -30,9 +35,18 @@ export function Friends() {
         <h3>へやに さんかする</h3>
         {/* 入力中に値を書きかえると、スマホのキーボード（変換・予測入力中）で文字が二重に入るため、
             入力はそのまま受けとり、表示は CSS で大文字に、送信時にだけ整える */}
-        <div className="row"><input className="input" placeholder="6けたの コード" value={code} maxLength={12} autoCapitalize="characters" autoCorrect="off" autoComplete="off" spellCheck={false} enterKeyHint="go" style={{ textTransform: 'uppercase', letterSpacing: '.2em', fontWeight: 900 }} onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing && online && joinCode.length === 6) join(); }} />
-          <button className="btn primary" disabled={!online || joinCode.length < 6} onClick={join}>さんか</button></div>
-        <p className="small muted" style={{ margin: 0 }}>ともだちの がめんに でている コードを いれてね。バトルの とちゅうでも さんせん できる！</p>
+        <div className="row"><input className="input" placeholder="6けたの コード" value={code} maxLength={12} autoCapitalize="characters" autoCorrect="off" autoComplete="off" spellCheck={false} enterKeyHint="go" style={{ textTransform: 'uppercase', letterSpacing: '.2em', fontWeight: 900 }} onChange={e => setCode(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) join(); }} disabled={!!joining} />
+          <button className="btn primary" disabled={!canJoin} onClick={join} style={{ whiteSpace: 'nowrap' }}>{joining ? 'つないでいます…' : 'さんか'}</button></div>
+        {joining ? (
+          <div className="row between small" style={{ gap: 8 }}>
+            <span><span className="dot joining" /> {joining.step}（{secs}びょう）</span>
+            <button className="btn sm" style={{ whiteSpace: 'nowrap' }} onClick={() => { sfx.select(); cancelJoin(); }}>やめる</button>
+          </div>
+        ) : joinCode.length > 0 && joinCode.length < 6 ? (
+          <p className="small muted" style={{ margin: 0 }}>あと {6 - joinCode.length} もじ いれてね</p>
+        ) : (
+          <p className="small muted" style={{ margin: 0 }}>ともだちの がめんに でている コードを いれてね。バトルの とちゅうでも さんせん できる！</p>
+        )}
       </div>
 
       <button className="area" style={{ background: 'linear-gradient(135deg,#cb2d3e,#ef473a)' }} disabled={!online} onClick={() => { unlockAudio(); setRaid(true); }}><h2>⚔️ みんなで バトルを つくる</h2><span className="small">さいだい4にんで ボスに いどむ。かてば ぜんいんに ゲットチャンス！</span></button>

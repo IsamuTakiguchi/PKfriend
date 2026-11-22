@@ -4,7 +4,6 @@
 // The room code doubles as the host's peer id, so a friend only needs the 6-character code.
 import type { Peer as PeerT, DataConnection } from 'peerjs';
 import { RoomHub, type Client, type Conn, type ClientMsg, type ServerMsg, type Player } from '@pkfriend/shared';
-import { toast } from './toast';
 
 const PREFIX = 'pkfriend-v1-';
 const ENV = (import.meta as unknown as { env: Record<string, string | undefined> }).env ?? {};
@@ -50,8 +49,10 @@ export class P2PNet {
   private retired: { hub: RoomHub; peer: PeerT; links: Set<DataConnection>; until: number }[] = [];
   private joinSeq = 0;                        // bumped to cancel a join that is still dialling
   private pendingDial: ((r: DialResult) => void) | null = null;
+  private starting: Promise<void> | null = null; // the broker connection being opened (shared by every caller)
 
-  constructor(private deliver: (m: ServerMsg) => void, private status: (s: 'offline' | 'connecting' | 'online') => void) {
+  constructor(private deliver: (m: ServerMsg) => void, private status: (s: 'offline' | 'connecting' | 'online') => void,
+              private progress: (step: string) => void = () => {}) {
     this.selfConn = { open: true, send: d => queueMicrotask(() => this.deliver(JSON.parse(d) as ServerMsg)) };
     // Phones drop the broker connection while the app is in the background (e.g. while sending the code by
     // LINE). Reconnect right away when it comes back, so the room can be found again.
@@ -62,8 +63,13 @@ export class P2PNet {
   }
 
   /** Connect to the broker (so the app shows オンライン and can dial rooms). */
-  async start() {
-    if (this.base && !this.base.destroyed) { if (this.base.disconnected) this.base.reconnect(); return; }
+  start(): Promise<void> {
+    if (this.base && !this.base.destroyed) { if (this.base.disconnected) { try { this.base.reconnect(); } catch { /* retried on 'disconnected' */ } } return Promise.resolve(); }
+    // every send() calls start(): without this, each one while still connecting opened another broker connection
+    if (!this.starting) this.starting = this.open().finally(() => { this.starting = null; });
+    return this.starting;
+  }
+  private async open() {
     this.status('connecting');
     try {
       const Peer = await loadPeer(); this.base = await openPeer(Peer);
@@ -129,24 +135,29 @@ export class P2PNet {
   private async join(codeRaw: string) {
     const code = String(codeRaw).toUpperCase().trim();
     if (this.hub && this.hostCode === code && this.self) { this.hub.handle(this.selfConn, this.self, { t: 'join_room', code }); return; }
-    if (!this.player) return;
+    if (!this.player) { this.deliver({ t: 'error', message: 'プレイヤーの じょうほうが ありません。アプリを ひらきなおしてね' }); return; }
     this.leave(true);
     const my = ++this.joinSeq;
     let result: DialResult = 'failed';
     for (let i = 0; i < JOIN_TRIES; i++) {
-      if (i > 0) { toast('もういちど つないでいます…'); await new Promise(r => setTimeout(r, 2000)); }
+      if (i > 0) { this.progress(`もういちど つないでいます…（${i + 1}/${JOIN_TRIES}）`); await new Promise(r => setTimeout(r, 2000)); }
       if (my !== this.joinSeq) return;
+      if (!this.base?.open) this.progress('つうしんの じゅんびを しています…');
       const base = await this.ready();
       if (my !== this.joinSeq) return;
-      if (!base) { this.deliver({ t: 'error', message: 'インターネットに つながっていません' }); return; }
+      if (!base) { this.deliver({ t: 'error', message: 'インターネットに つながっていません。つうしんを たしかめて もういちど ためしてね' }); return; }
+      this.progress(i > 0 ? `もういちど つないでいます…（${i + 1}/${JOIN_TRIES}）` : 'へやを さがしています…');
       result = await this.dial(base, code);
       if (my !== this.joinSeq || result === 'open') return;
+      if (result === 'unavailable' && i >= 1) break; // the broker says no such room: one retry is enough
     }
     this.deliver({ t: 'error', message: result === 'unavailable'
       ? 'そのコードの へやは みつかりません。コードと、つくった人が へやの がめんを ひらいているかを たしかめてね'
       : 'へやに つながりませんでした。つくった人に アプリを ひらいたまま まってもらって、もういちど ためしてね' });
     this.deliver({ t: 'left' });
   }
+  /** Stop a join that is still connecting. */
+  cancelJoin() { if (!this.hub) this.leave(true); }
   /** The broker connection, (re)opened if the phone dropped it. */
   private async ready(): Promise<PeerT | null> {
     await this.start();

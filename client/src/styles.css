@@ -195,6 +195,7 @@ h1 { font-size: 24px; } h2 { font-size: 18px; } h3 { font-size: 15px; }
 .member { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--card2); }
 .member .av { width: 40px; height: 40px; }
 .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); } .dot.on { background: var(--ok); }
+.dot.joining { display: inline-block; vertical-align: middle; margin-right: 4px; background: var(--warn); animation: blink 1s infinite; }
 .tabs { display: flex; gap: 6px; background: var(--bg2); padding: 4px; border-radius: 12px; } .tabs button { flex: 1; padding: 8px; border-radius: 9px; font-weight: 900; color: var(--muted); } .tabs button.on { background: var(--card2); color: var(--text); }
 .area { position: relative; border-radius: 18px; padding: 16px; min-height: 96px; color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.5); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end; border: 1px solid rgba(255,255,255,.2); }
 .area:active { transform: scale(.98); } .area .lvl { position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 900; background: rgba(0,0,0,.35); padding: 2px 8px; border-radius: 999px; }
